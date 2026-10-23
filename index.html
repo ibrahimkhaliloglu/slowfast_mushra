@@ -246,7 +246,7 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
       </div>
       <div class="panel">
         <h3>Export</h3>
-        <p class="muted">One row per listener, trial and sample: system, sentence, score and time. To delete a listener or add answers sent by hand, use the results sheet.</p>
+        <p class="muted">One row per listener, trial and sample: system, sentence, score and time (listeners excluded by hand included, marked in the last column). To exclude a listener or add answers sent by hand, use the MUSHRA menu in the results sheet.</p>
         <div class="row-actions">
           <button class="btn small" id="csvSave" type="button">Download CSV</button>
           <span class="status" id="csvStatus"></span>
@@ -492,11 +492,12 @@ function flatten() {
     if (!by.has(sid)) by.set(sid, { sid, info: { name: row[c.listener], nativeLanguage: row[c.native_language], headphones: row[c.headphones] }, rows: [] });
     by.get(sid).rows.push({ sid, trial: row[c.trial], position: row[c.trial_position], utterance: row[c.utterance], stim: row[c.stimulus], label: row[c.label], system: row[c.system], score: Number(row[c.score]), played: row[c.played], time: row[c.trial_finished] });
   }
-  const done = new Set(d.finished || []);
+  const done = new Set(d.finished || []), manual = d.manual || {};
   return [...by.values()].map((l) => {
     const trials = [...new Set(l.rows.map((r) => r.trial))];
     const hrFails = trials.filter((t) => l.rows.some((r) => r.trial === t && r.system === d.hidden && r.score < 90)).length;
-    return { ...l, nTrials: trials.length, finished: done.has(l.sid), hrFails, excluded: trials.length > 0 && hrFails / trials.length > 0.15 };
+    return { ...l, nTrials: trials.length, finished: done.has(l.sid), hrFails, excluded: trials.length > 0 && hrFails / trials.length > 0.15,
+      out: l.sid in manual, reason: manual[l.sid] || "" };  // out: excluded by hand in the results sheet, left out of every view
   });
 }
 function tq(df) { const t = [0, 12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228, 2.201, 2.179, 2.160, 2.145, 2.131, 2.120, 2.110, 2.101, 2.093, 2.086, 2.080, 2.074, 2.069, 2.064, 2.060, 2.056, 2.052, 2.048, 2.045, 2.042]; return df <= 0 ? NaN : df <= 30 ? t[df] : df <= 60 ? 2.0 : df <= 120 ? 1.98 : 1.96; }
@@ -508,12 +509,12 @@ function renderResults() {
   if (!R.data) return;
   const name = Object.fromEntries(R.data.systems), order = R.data.systems.map(([s]) => s);
   const L = flatten();
-  const used = L.filter((l) => l.nTrials > 0 && !(R.screen && l.excluded));
+  const used = L.filter((l) => l.nTrials > 0 && !l.out && !(R.screen && l.excluded));
   $("rMsg").hidden = L.length > 0;
   $("rMsg").textContent = L.length ? "" : "No ratings yet. They appear here as soon as a listener finishes a trial; use Refresh.";
   $("rBody").hidden = L.length === 0;
   const trialsDone = used.reduce((a, l) => a + l.nTrials, 0);
-  $("chips").innerHTML = [[used.length, "listeners used"], [L.filter((l) => l.finished).length, "finished the test"], [trialsDone, "trials rated"], [L.filter((l) => l.excluded).length, "fail post-screening"]]
+  $("chips").innerHTML = [[used.length, "listeners used"], [L.filter((l) => l.finished).length, "finished the test"], [trialsDone, "trials rated"], [L.filter((l) => l.excluded && !l.out).length, "fail post-screening"], [L.filter((l) => l.out).length, "excluded by hand"]]
     .map(([v, l]) => `<div class="chip"><b>${v}</b><span>${l}</span></div>`).join("");
   const by = {};
   for (const l of used) for (const r of l.rows) (by[r.system] ||= []).push(r.score);
@@ -523,7 +524,7 @@ function renderResults() {
   $("sysTable").innerHTML = `<thead><tr><th>System</th><th class="num">Mean</th><th class="num">± 95% CI</th><th class="num">SD</th><th class="num">Ratings</th></tr></thead><tbody>` +
     st.map((x) => `<tr><td>${esc(x.label)}</td><td class="num">${f1(x.mean)}</td><td class="num">${f1(x.ci)}</td><td class="num">${f1(x.sd)}</td><td class="num">${x.n}</td></tr>`).join("") + "</tbody>";
   $("lisTable").innerHTML = `<thead><tr><th>Name / ID</th><th>Native language</th><th>Headphones</th><th class="num">Trials</th><th class="num">Hidden ref &lt; 90</th><th>Screening</th><th>Finished</th></tr></thead><tbody>` +
-    L.map((l) => `<tr><td>${esc(l.info.name || "anonymous")}</td><td>${esc(l.info.nativeLanguage || "–")}</td><td>${esc(l.info.headphones || "–")}</td><td class="num">${l.nTrials}/${R.data.trials}</td><td class="num">${l.hrFails}</td><td>${l.excluded ? '<span class="pill out">Exclude</span>' : '<span class="pill ok">Keep</span>'}</td><td>${l.finished ? "yes" : "not yet"}</td></tr>`).join("") + "</tbody>";
+    L.map((l) => `<tr><td>${esc(l.info.name || "anonymous")}</td><td>${esc(l.info.nativeLanguage || "–")}</td><td>${esc(l.info.headphones || "–")}</td><td class="num">${l.nTrials}/${R.data.trials}</td><td class="num">${l.hrFails}</td><td>${l.out ? `<span class="pill out" title="${esc(l.reason)}">Excluded by hand${l.reason ? ": " + esc(l.reason) : ""}</span>` : l.excluded ? '<span class="pill out">Exclude</span>' : '<span class="pill ok">Keep</span>'}</td><td>${l.finished ? "yes" : "not yet"}</td></tr>`).join("") + "</tbody>";
   R.last = { L };
 }
 function chartSVG(st) {
@@ -546,10 +547,10 @@ function chartSVG(st) {
 }
 function csv() {
   const { L } = R.last || { L: [] };
-  const head = ["session", "name", "native_language", "headphones", "trial", "trial_position", "utterance", "stimulus_id", "sample_letter", "system", "score", "played", "trial_finished_at", "fails_post_screening"];
+  const head = ["session", "name", "native_language", "headphones", "trial", "trial_position", "utterance", "stimulus_id", "sample_letter", "system", "score", "played", "trial_finished_at", "fails_post_screening", "excluded_by_hand"];
   const q = (v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const lines = [head.join(",")];
-  for (const l of L) for (const r of l.rows) lines.push([r.sid, l.info.name, l.info.nativeLanguage, l.info.headphones, r.trial, r.position, r.utterance, r.stim, r.label, r.system, r.score, r.played, r.time, l.excluded].map(q).join(","));
+  for (const l of L) for (const r of l.rows) lines.push([r.sid, l.info.name, l.info.nativeLanguage, l.info.headphones, r.trial, r.position, r.utterance, r.stim, r.label, r.system, r.score, r.played, r.time, l.excluded, l.out].map(q).join(","));
   return lines.join("\n") + "\n";
 }
 $("csvSave").addEventListener("click", () => {
