@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ult2mel MUSHRA Test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow column (≈720px) — intro, trial and results are screens of the same column; rating rows share one grid so the band scale lines up with every slider. */
+:root {
+  --bg: #f3f6f7;
+  --surface: #ffffff;
+  --ink: #15212b;
+  --muted: #586773;
+  --line: #d3dce1;
+  --accent: #0d6b78;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcecef;
+  --band-1: #e6edf0;
+  --band-2: #d6e1e5;
+  --ok: #2a7a3e;
+  --warn: #9a4a06;
+  --danger: #a3262a;
+  --font-display: "Bricolage Grotesque", "IBM Plex Sans", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1418; --surface: #141d23; --ink: #e4ecf0; --muted: #94a3ad; --line: #283640;
+    --accent: #52b9c5; --accent-ink: #062428; --accent-soft: #173238;
+    --band-1: #1b262d; --band-2: #23313a; --ok: #6cc27f; --warn: #e3a35c; --danger: #f08a8c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1418; --surface: #141d23; --ink: #e4ecf0; --muted: #94a3ad; --line: #283640;
+  --accent: #52b9c5; --accent-ink: #062428; --accent-soft: #173238;
+  --band-1: #1b262d; --band-2: #23313a; --ok: #6cc27f; --warn: #e3a35c; --danger: #f08a8c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+main { max-width: 720px; margin: 0 auto; display: grid; gap: 22px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(26px, 6vw, 36px); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 21px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; max-width: 65ch; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+.stack { display: grid; gap: 12px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 14px; min-width: 0; }
+ul.steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 65ch; }
+.scale-key { display: grid; grid-template-columns: repeat(5, 1fr); border-radius: 6px; overflow: hidden; font-size: 12px; text-align: center; }
+.scale-key span { padding: 6px 2px; background: var(--band-1); font-variant-numeric: tabular-nums; }
+.scale-key span:nth-child(even) { background: var(--band-2); }
+.scale-key b { display: block; font-weight: 600; }
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+label.field { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+input[type="text"], select, textarea {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; width: 100%;
+}
+textarea { font-family: var(--font-mono); font-size: 12px; min-height: 120px; resize: vertical; }
+button { font: inherit; cursor: pointer; }
+.btn { border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 10px 18px; font-weight: 600; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn.small { padding: 6px 12px; font-size: 13px; }
+.btn.danger { border-color: var(--danger); color: var(--danger); background: transparent; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+/* trial */
+.trial-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.progress { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.progress i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+.refbtn { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--ink); border-radius: var(--radius); padding: 12px 14px; position: relative; overflow: hidden; }
+.refbtn .meta { display: grid; }
+.refbtn .meta b { font-family: var(--font-display); font-size: 17px; }
+.refbtn .meta span { font-size: 13px; color: var(--muted); }
+.playhead { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); width: calc(var(--p, 0) * 100%); }
+.icon { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); }
+.icon svg { width: 14px; height: 14px; fill: currentColor; }
+.rate { display: grid; gap: 6px; }
+.rrow, .scalehead { display: grid; grid-template-columns: 44px 22px minmax(0, 1fr) 34px; gap: 8px; align-items: center; }
+.rrow { padding: 6px 0; border-top: 1px solid var(--line); }
+.scalehead { font-size: clamp(10px, 2.6vw, 12px); color: var(--muted); }
+.scalehead .bands { grid-column: 3; display: grid; grid-template-columns: repeat(5, 1fr); text-align: center; padding-inline: 11px; }
+.scalehead .bands span { overflow: hidden; text-overflow: clip; white-space: nowrap; }
+.pbtn { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); display: grid; place-items: center; position: relative; padding: 0; }
+.pbtn svg { width: 14px; height: 14px; fill: currentColor; }
+.pbtn.played { border-color: var(--accent); }
+.pbtn.played::after { content: ""; position: absolute; right: 1px; top: 1px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); }
+.pbtn.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.letter { font-family: var(--font-display); font-weight: 700; font-size: 17px; text-align: center; }
+.val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; font-size: 14px; }
+.val.top { color: var(--accent); font-weight: 600; }
+input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 30px; background: transparent; margin: 0; }
+input[type="range"]::-webkit-slider-runnable-track { height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--band-1) 0 20%, var(--band-2) 20% 40%, var(--band-1) 40% 60%, var(--band-2) 60% 80%, var(--band-1) 80% 100%); }
+input[type="range"]::-moz-range-track { height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--band-1) 0 20%, var(--band-2) 20% 40%, var(--band-1) 40% 60%, var(--band-2) 60% 80%, var(--band-1) 80% 100%); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -6px; border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--accent); }
+input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--accent); }
+input[type="range"]:disabled { opacity: .45; }
+.status { font-size: 13px; color: var(--muted); min-height: 1.5em; }
+.status.bad { color: var(--warn); }
+.note { font-size: 13px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); }
+.note.warn { background: transparent; border: 1px solid var(--warn); color: var(--ink); }
+
+/* results */
+.chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 8px 12px; display: grid; min-width: 110px; }
+.chip b { font-family: var(--font-mono); font-size: 20px; font-variant-numeric: tabular-nums; }
+.chip span { font-size: 12px; color: var(--muted); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 600; color: var(--muted); font-size: 12px; }
+td.num, th.num { text-align: right; font-family: var(--font-mono); }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid currentColor; }
+.pill.ok { color: var(--ok); } .pill.out { color: var(--warn); }
+.toggle { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+svg.chart { width: 100%; height: auto; display: block; }
+svg.chart text { fill: var(--ink); font-family: var(--font-body); font-size: 12px; }
+svg.chart .axis text { fill: var(--muted); font-size: 11px; }
+svg.chart .grid { stroke: var(--line); stroke-width: 1; }
+svg.chart .bandbg { fill: var(--band-1); }
+svg.chart .whisk { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
+svg.chart .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+svg.chart .hit { fill: transparent; }
+svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
+@media (prefers-reduced-motion: reduce) { .progress i { transition: none; } }
+</style>
+</head>
+<body>
+
+<main id="app">
+  <section id="intro" class="stack">
+    <div class="stack">
+      <span class="eyebrow">Listening test · ultrasound-to-speech · speaker 01fi</span>
+      <h1>How natural does this synthesised speech sound?</h1>
+      <p>These sentences were generated from ultrasound videos of the tongue, without any recorded audio. You will compare several versions of each sentence with the original recording and rate how close each one sounds to it. This is a MUSHRA test (MUltiple Stimuli with Hidden Reference and Anchor, ITU-R BS.1534).</p>
+    </div>
+    <div class="panel">
+      <h2>How it works</h2>
+      <ul class="steps">
+        <li>Use headphones in a quiet room. Set a comfortable volume on the first reference and keep it.</li>
+        <li>There are <b>7 trials</b>, one sentence each, about 15 minutes in total.</li>
+        <li>In each trial, play the <b>Reference</b> (the original recording), then play every sample A–I. You can switch between them while they play and replay them as often as you like.</li>
+        <li>Rate each sample from 0 to 100 for overall quality compared with the reference: how natural and how clear it sounds, and how close it is to the reference.</li>
+        <li>One of the samples is the reference itself, hidden. Find it and rate it <b>100</b>. Each trial needs at least one sample at 100 before you can continue.</li>
+      </ul>
+      <div class="scale-key" aria-label="Rating scale">
+        <span><b>Bad</b>0–20</span><span><b>Poor</b>20–40</span><span><b>Fair</b>40–60</span><span><b>Good</b>60–80</span><span><b>Excellent</b>80–100</span>
+      </div>
+    </div>
+    <form class="panel" id="pform" autocomplete="off">
+      <h2>About you <span class="muted" style="font-weight:400;font-size:14px">(optional)</span></h2>
+      <div class="form">
+        <label class="field" for="p-name">Name or anonymous ID<input type="text" id="p-name" maxlength="60" placeholder="e.g. L07"></label>
+        <label class="field" for="p-lang">Native language<input type="text" id="p-lang" maxlength="40" placeholder="e.g. Hungarian"></label>
+        <label class="field" for="p-phones">Listening with headphones?
+          <select id="p-phones"><option value="">Choose</option><option value="yes">Yes</option><option value="no">No, loudspeakers</option></select>
+        </label>
+      </div>
+      <div class="row-actions">
+        <button class="btn" type="submit" id="start">Start the test</button>
+        <button class="btn ghost" type="button" id="resume" hidden>Resume</button>
+      </div>
+      <p class="status" id="saveInfo"></p>
+    </form>
+  </section>
+
+  <section id="trial" class="stack" hidden>
+    <div class="stack" style="gap:8px">
+      <div class="trial-head">
+        <h2 id="tTitle">Trial 1 of 7</h2>
+        <span class="eyebrow" id="tCount"></span>
+      </div>
+      <div class="progress"><i id="tProg"></i></div>
+    </div>
+    <button class="refbtn" id="refBtn" type="button">
+      <span class="icon" id="refIcon"></span>
+      <span class="meta"><b>Reference</b><span>Original recording. Rate the samples against this.</span></span>
+      <span class="playhead"></span>
+    </button>
+    <div class="panel rate" id="rate">
+      <div class="scalehead" aria-hidden="true"><span></span><span></span><div class="bands"><span>Bad</span><span>Poor</span><span>Fair</span><span>Good</span><span>Excellent</span></div><span></span></div>
+      <div id="rows"></div>
+    </div>
+    <p class="status" id="tStatus"></p>
+    <div class="row-actions">
+      <button class="btn" id="next" type="button" disabled>Next trial</button>
+      <button class="btn ghost" id="stop" type="button">Stop sound</button>
+    </div>
+  </section>
+
+  <section id="done" class="stack" hidden>
+    <span class="eyebrow">Finished</span>
+    <h1>Thank you for listening.</h1>
+    <p id="doneMsg"></p>
+    <div class="panel" id="fallback" hidden>
+      <h3>Send your answers by hand</h3>
+      <p class="muted">Your answers could not be sent automatically. Copy this text and send it to the person who shared this test with you: it contains your ratings and the details you entered.</p>
+      <textarea id="fbText" readonly></textarea>
+      <div class="row-actions"><button class="btn small" id="fbCopy" type="button">Copy answers</button><span class="status" id="fbStatus"></span></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+(() => {
+const TRIALS = [{"id":"t1","ref":"f34b5e157b","stimuli":["ccf797389d","55e953e93b","fbc4c2d54c","6f1a033698","098f9d8f0a","3825f54792","fbf4761068","cfa2e74eca","e121b44269"]},{"id":"t2","ref":"9a61e833b7","stimuli":["fb94134cd6","1cdc4ba4fd","a1a4a33a6c","c3f518fade","8cca51eab5","689c74d113","88d4d655f8","97dfbc77a7","f76d431103"]},{"id":"t3","ref":"01bcf69010","stimuli":["3a8d927cf4","2d21f96629","376a935247","707e559150","514374e786","1f30a0b40a","7ea1a6fa28","6f4577784e","76c61c8160"]},{"id":"t4","ref":"c65d8e497c","stimuli":["500ea73236","4474b5a807","85183d5072","faf5eda58c","b60b7e8880","d09425d73f","aaec5fced4","53d346bed0","5a2ef0f252"]},{"id":"t5","ref":"895e647ea8","stimuli":["481abeb975","515c229173","4c36cdf356","69125a7c09","761e18e034","631f7b27c3","86c18befc5","d0ee271f7f","722919414e"]},{"id":"t6","ref":"0e87c55ce0","stimuli":["681293bf28","d1eafa62dc","ce69e122ba","7c2c5e9a73","21267efdfb","d18866ba6f","c3306b9eee","21c560a272","ed8e29b1a7"]},{"id":"t7","ref":"ba21070c16","stimuli":["6754cbcf94","3dc7086f6b","cab1eec1f8","32414974bd","18a15688c8","8c2ab27cae","3651eeb392","6d8a27c173","bcb5989bdc"]}];
+const TEST = "ult2mel-01fi-v1";
+const LS_KEY = "mushra-" + TEST;
+const LETTERS = "ABCDEFGHIJKL";
+const ICON_PLAY = '<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9.5-5.5z"/></svg>';
+const ICON_STOP = '<svg viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="2.5" width="9" height="9" rx="1"/></svg>';
+const $ = (id) => document.getElementById(id);
+const rid = (n = 10) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => (b % 36).toString(36)).join("");
+const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const lsGet = () => { try { return JSON.parse(localStorage.getItem(LS_KEY) || "null"); } catch { return null; } };
+const lsSet = (v) => { try { v ? localStorage.setItem(LS_KEY, JSON.stringify(v)) : localStorage.removeItem(LS_KEY); } catch {} };
+
+/* ---------- state ---------- */
+let S = null; // {sid, info, order:[trialIdx], perms:{tid:[stim]}, idx, recs:{tid:rec}}
+
+function show(name) {
+  for (const s of ["intro", "trial", "done"]) $(s).hidden = s !== name;
+  if (name !== "trial") audio.stop();
+  window.scrollTo(0, 0);
+}
+
+function initIntro() {
+  const saved = lsGet();
+  if (saved && saved.idx > 0 && saved.idx < saved.order.length) {
+    $("resume").hidden = false;
+    $("resume").textContent = `Resume at trial ${saved.idx + 1} of ${saved.order.length}`;
+  }
+}
+$("pform").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const order = shuffle(TRIALS.map((_, i) => i));
+  const perms = {}; for (const t of TRIALS) perms[t.id] = shuffle(t.stimuli);
+  S = { sid: rid(), info: { name: $("p-name").value.trim(), nativeLanguage: $("p-lang").value.trim(), headphones: $("p-phones").value }, startedAt: new Date().toISOString(), order, perms, idx: 0, recs: {}, ua: navigator.userAgent.slice(0, 160) };
+  lsSet(S); audio.unlock(); startTrial();
+});
+$("resume").addEventListener("click", () => { S = lsGet(); if (!S) return; audio.unlock(); startTrial(); });
+
+/* ---------- audio (Web Audio so switching is instant and position-synced) ---------- */
+const audio = (() => {
+  let ctx = null; const bufs = new Map(); let cur = null; let raf = 0;
+  const listeners = new Set();
+  function unlock() {
+    if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; ctx = new AC(); }
+    if (ctx.state === "suspended") ctx.resume();
+  }
+  function load(id) {
+    if (!bufs.has(id)) {
+      unlock();
+      const p = fetch("audio/" + id + ".mp3").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
+        .then((ab) => new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej)));
+      p.catch(() => bufs.delete(id));
+      bufs.set(id, p);
+    }
+    return bufs.get(id);
+  }
+  function pos() { if (!cur) return 0; return (ctx.currentTime - cur.t0) + cur.off; }
+  async function play(id) {
+    unlock();
+    if (cur && cur.id === id) { stop(); return; }
+    const buf = await load(id);
+    let off = 0;
+    if (cur) { off = pos(); if (off >= buf.duration - 0.05) off = 0; halt(); }
+    const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination);
+    src.onended = () => { if (cur && cur.src === src) { cur = null; emit(); } };
+    src.start(0, off);
+    cur = { id, src, t0: ctx.currentTime, off, dur: buf.duration };
+    emit(); tick();
+  }
+  function halt() { if (cur) { cur.src.onended = null; try { cur.src.stop(); } catch {} cur = null; } }
+  function stop() { halt(); emit(); }
+  function tick() {
+    cancelAnimationFrame(raf);
+    const step = () => { for (const f of listeners) f(cur ? cur.id : null, cur ? Math.min(1, pos() / cur.dur) : 0); if (cur) raf = requestAnimationFrame(step); };
+    raf = requestAnimationFrame(step);
+  }
+  function emit() { for (const f of listeners) f(cur ? cur.id : null, cur ? Math.min(1, pos() / cur.dur) : 0); }
+  return { unlock, load, play, stop, on: (f) => listeners.add(f), playing: () => (cur ? cur.id : null) };
+})();
+$("stop").addEventListener("click", () => audio.stop());
+
+/* ---------- trial ---------- */
+let T = null; // current trial view {t, stims, scores, played:Set, t0}
+function startTrial() {
+  if (S.idx >= S.order.length) return finish();
+  const t = TRIALS[S.order[S.idx]];
+  const stims = S.perms[t.id];
+  T = { t, stims, scores: Object.fromEntries(stims.map((s) => [s, 0])), played: new Set(), refPlayed: false, t0: new Date().toISOString(), loadErr: false };
+  $("tTitle").textContent = `Trial ${S.idx + 1} of ${S.order.length}`;
+  $("tProg").style.width = (S.idx / S.order.length * 100) + "%";
+  $("next").textContent = S.idx === S.order.length - 1 ? "Finish" : "Next trial";
+  const rows = $("rows"); rows.textContent = "";
+  stims.forEach((s, i) => {
+    const r = document.createElement("div"); r.className = "rrow"; r.dataset.stim = s;
+    r.innerHTML = `<button class="pbtn" type="button" aria-label="Play sample ${LETTERS[i]}">${ICON_PLAY}</button><span class="letter">${LETTERS[i]}</span><input type="range" min="0" max="100" step="1" value="0" id="s-${t.id}-${i}" aria-label="Score for sample ${LETTERS[i]}"><span class="val">0</span>`;
+    const btn = r.querySelector("button"), rng = r.querySelector("input"), val = r.querySelector(".val");
+    btn.addEventListener("click", () => { T.played.add(s); btn.classList.add("played"); audio.play(s).catch(loadFail); check(); });
+    rng.addEventListener("input", () => { const v = +rng.value; T.scores[s] = v; val.textContent = v; val.classList.toggle("top", v === 100); check(); });
+    rows.appendChild(r);
+  });
+  $("refIcon").innerHTML = ICON_PLAY;
+  [t.ref, ...stims].forEach((id) => audio.load(id).catch(loadFail));
+  check();
+  show("trial");
+}
+function loadFail() { T.loadErr = true; $("tStatus").textContent = "A sound file did not load. Check your connection and reload the page; your progress is kept."; $("tStatus").className = "status bad"; }
+$("refBtn").addEventListener("click", () => { T.refPlayed = true; audio.play(T.t.ref).catch(loadFail); });
+audio.on((id, p) => {
+  if (!T) return;
+  const ref = $("refBtn");
+  ref.style.setProperty("--p", id === T.t.ref ? p : 0);
+  $("refIcon").innerHTML = id === T.t.ref ? ICON_STOP : ICON_PLAY;
+  for (const r of $("rows").children) {
+    const on = r.dataset.stim === id, b = r.querySelector("button");
+    if (b.classList.contains("on") !== on) { b.classList.toggle("on", on); b.innerHTML = on ? ICON_STOP : ICON_PLAY; }
+  }
+});
+function check() {
+  if (T.loadErr) return;
+  const left = T.stims.filter((s) => !T.played.has(s)).length;
+  const has100 = Object.values(T.scores).some((v) => v === 100);
+  let msg = "";
+  if (left) msg = `Play every sample before continuing: ${left} of ${T.stims.length} not played yet.`;
+  else if (!has100) msg = "Rate at least one sample 100: the hidden reference is among them.";
+  $("tStatus").textContent = msg || (sendFailed ? "Ready. Your answers are not reaching the server right now; they are kept and sent again, or you can copy them at the end." : "Ready.");
+  $("tStatus").className = "status" + (msg ? " bad" : "");
+  $("next").disabled = !!msg;
+}
+$("next").addEventListener("click", () => {
+  audio.stop();
+  const rec = { trial: T.t.id, position: S.idx + 1, startedAt: T.t0, finishedAt: new Date().toISOString(),
+    ratings: T.stims.map((s, i) => ({ stim: s, label: LETTERS[i], score: T.scores[s], played: T.played.has(s) })) };
+  S.recs[T.t.id] = rec; S.idx += 1; lsSet(S);
+  save(rec);
+  startTrial();
+});
+
+/* ---------- saving: every finished trial is posted to the Google Apps Script web app (apps_script/Code.gs) ---------- */
+// Paste the web app URL from the Apps Script deployment here (SETUP.md, step 3).
+// Ratings carry stimulus ids only; the script maps them to systems, so this page never names a system.
+const ENDPOINT = "https://script.googleusercontent.com/macros/echo?user_content_key=AUkAhnQY20cxCE0qLjmkkbnWNZz9K8LIVi20BxDbNKmsEkJmA6sw6Y9UpGsV0UPKefEIXptzjL2SmUNG639Xdt_-8sHIzDPgLHYWwLMc7VSAgkGJagG3scD0wLtVRijqq81hpXQAi5KPHBYlbwkW-P6h_aHllwOJJLXa9KYu3on5sRiAHIcjgNypQ1mou5vgbWbwFPEcgoDUY7MSImPVjpe_g-QGqCfE8cu4RduqftNtB3oXiU-ASYA23OUDyFMRjHGfmFQ8VCHv7yGKn5QWpUXnwMkTmk-WYw&lib=MubpqIfYb-yt4NVyXjG2smhgkr6VwIdp9";
+const Q_KEY = LS_KEY + "-outbox";
+const qGet = () => { try { return JSON.parse(localStorage.getItem(Q_KEY) || "[]"); } catch { return []; } };
+const qSet = (q) => { try { q.length ? localStorage.setItem(Q_KEY, JSON.stringify(q)) : localStorage.removeItem(Q_KEY); } catch {} };
+let outbox = qGet();   // messages not yet confirmed by the server, kept across reloads; the server ignores duplicates
+let sendFailed = false;
+let chain = Promise.resolve();
+function sessionMeta() { return { info: S.info, startedAt: S.startedAt, ua: S.ua }; }
+async function send(msg) {
+  // A plain-text body keeps this a "simple" request (no CORS preflight), which Apps Script web apps accept
+  const r = await fetch(ENDPOINT, { method: "POST", body: JSON.stringify(msg) });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || "rejected");
+}
+function flush() {
+  chain = chain.then(async () => {
+    while (outbox.length) {
+      try { await send(outbox[0]); } catch { sendFailed = true; return; }
+      outbox.shift(); qSet(outbox);
+    }
+    sendFailed = false;
+  });
+  return chain;
+}
+function save(rec) {
+  outbox.push({ kind: "trial", test: TEST, sid: S.sid, ...sessionMeta(), rec });
+  qSet(outbox);
+  return flush();
+}
+async function finish() {
+  show("done");
+  $("doneMsg").textContent = "Sending your answers…";
+  outbox.push({ kind: "finish", test: TEST, sid: S.sid, ...sessionMeta(), finishedAt: new Date().toISOString(), nTrials: Object.keys(S.recs).length });
+  qSet(outbox);
+  await flush();
+  $("fbText").value = JSON.stringify({ test: TEST, sid: S.sid, session: { ...sessionMeta(), finishedAt: new Date().toISOString(), trials: S.recs } });
+  if (outbox.length) {
+    $("doneMsg").textContent = "Your answers could not be sent. They are kept in this browser and sent again the next time you open this page, but to be safe, please also copy them below.";
+    $("fallback").hidden = false;
+  } else {
+    $("doneMsg").textContent = "Your answers are saved. You can close this page.";
+    $("fallback").hidden = true;
+  }
+  S = null; lsSet(null);
+}
+if (outbox.length) flush();   // answers left over from an earlier visit
+$("fbCopy").addEventListener("click", () => copyText($("fbText"), $("fbStatus")));
+function copyText(el, statusEl, text) {
+  const t = text ?? el.value;
+  const fallback = () => { if (el) { el.focus(); el.select(); } statusEl.textContent = "Select all and copy with your keyboard."; };
+  try { navigator.clipboard.writeText(t).then(() => { statusEl.textContent = "Copied."; }, fallback); } catch { fallback(); }
+}
+
+
+initIntro();
+})();
+</script>
+</body>
+</html>
