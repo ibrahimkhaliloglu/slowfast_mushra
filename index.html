@@ -358,7 +358,7 @@ $("next").addEventListener("click", () => {
 /* ---------- saving: every finished trial is posted to the Google Apps Script web app (apps_script/Code.gs) ---------- */
 // Paste the web app URL from the Apps Script deployment here (SETUP.md, step 3).
 // Ratings carry stimulus ids only; the script maps them to systems, so this page never names a system.
-const ENDPOINT = "https://script.googleusercontent.com/macros/echo?user_content_key=AUkAhnQY20cxCE0qLjmkkbnWNZz9K8LIVi20BxDbNKmsEkJmA6sw6Y9UpGsV0UPKefEIXptzjL2SmUNG639Xdt_-8sHIzDPgLHYWwLMc7VSAgkGJagG3scD0wLtVRijqq81hpXQAi5KPHBYlbwkW-P6h_aHllwOJJLXa9KYu3on5sRiAHIcjgNypQ1mou5vgbWbwFPEcgoDUY7MSImPVjpe_g-QGqCfE8cu4RduqftNtB3oXiU-ASYA23OUDyFMRjHGfmFQ8VCHv7yGKn5QWpUXnwMkTmk-WYw&lib=MubpqIfYb-yt4NVyXjG2smhgkr6VwIdp9";
+const ENDPOINT = "https://script.google.com/macros/s/AKfycbwjgHfGFWCQTL7IWY4EVaAQ2EwGnePQ3Jv-z1LTYjs8VfkcHsAI9bQbFZ4AmXtXMJlz/exec";
 const Q_KEY = LS_KEY + "-outbox";
 const qGet = () => { try { return JSON.parse(localStorage.getItem(Q_KEY) || "[]"); } catch { return []; } };
 const qSet = (q) => { try { q.length ? localStorage.setItem(Q_KEY, JSON.stringify(q)) : localStorage.removeItem(Q_KEY); } catch {} };
