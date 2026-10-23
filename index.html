@@ -66,7 +66,7 @@ ul.steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 65
 .scale-key b { display: block; font-weight: 600; }
 .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
 label.field { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
-input[type="text"], select, textarea {
+input[type="text"], input[type="password"], select, textarea {
   font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; width: 100%;
 }
 textarea { font-family: var(--font-mono); font-size: 12px; min-height: 120px; resize: vertical; }
@@ -216,6 +216,44 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
     </div>
   </section>
 
+  <section id="results" class="stack" hidden>
+    <div class="trial-head">
+      <div class="stack" style="gap:4px"><span class="eyebrow">Research team</span><h1>Results</h1></div>
+      <div class="row-actions">
+        <button class="btn ghost small" id="rRefresh" type="button" hidden>Refresh</button>
+        <button class="btn ghost small" id="backIntro" type="button">Back to the test</button>
+      </div>
+    </div>
+    <form class="panel" id="keyForm" autocomplete="off" hidden>
+      <p class="muted">Enter the results access key. It is created in the results sheet with <b>MUSHRA → Create results access key</b>.</p>
+      <div class="row-actions">
+        <input type="password" id="rKey" placeholder="Access key" style="max-width:320px">
+        <button class="btn" type="submit">Show results</button>
+      </div>
+    </form>
+    <p id="rMsg" class="muted" hidden></p>
+    <div id="rBody" class="stack" hidden>
+      <div class="chips" id="chips"></div>
+      <label class="toggle" for="screen"><input type="checkbox" id="screen"> Post-screening: exclude listeners who rated the hidden reference below 90 in more than 15% of their trials</label>
+      <div class="panel">
+        <h3>Mean score per system, with 95% confidence interval</h3>
+        <div id="chart"></div>
+        <div class="scroll"><table id="sysTable"></table></div>
+      </div>
+      <div class="panel">
+        <h3>Listeners</h3>
+        <div class="scroll"><table id="lisTable"></table></div>
+      </div>
+      <div class="panel">
+        <h3>Export</h3>
+        <p class="muted">One row per listener, trial and sample: system, sentence, score and time. To delete a listener or add answers sent by hand, use the results sheet.</p>
+        <div class="row-actions">
+          <button class="btn small" id="csvSave" type="button">Download CSV</button>
+          <span class="status" id="csvStatus"></span>
+        </div>
+      </div>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -236,7 +274,7 @@ const lsSet = (v) => { try { v ? localStorage.setItem(LS_KEY, JSON.stringify(v))
 let S = null; // {sid, info, order:[trialIdx], perms:{tid:[stim]}, idx, recs:{tid:rec}}
 
 function show(name) {
-  for (const s of ["intro", "trial", "done"]) $(s).hidden = s !== name;
+  for (const s of ["intro", "trial", "done", "results"]) $(s).hidden = s !== name;
   if (name !== "trial") audio.stop();
   window.scrollTo(0, 0);
 }
@@ -413,7 +451,118 @@ function copyText(el, statusEl, text) {
 }
 
 
+/* ---------- results view for the research team: <page>#results, data from the script once the access key matches ---------- */
+const KEY_LS = LS_KEY + "-resultskey";
+let R = { data: null, screen: false, last: null };
+const keyGet = () => { try { return localStorage.getItem(KEY_LS) || ""; } catch { return ""; } };
+const keySet = (k) => { try { k ? localStorage.setItem(KEY_LS, k) : localStorage.removeItem(KEY_LS); } catch {} };
+function openResults() {
+  show("results");
+  const k = keyGet();
+  if (k) loadResults(k); else { $("keyForm").hidden = false; $("rKey").focus(); }
+}
+async function loadResults(key) {
+  $("keyForm").hidden = true; $("rMsg").hidden = false; $("rMsg").textContent = "Loading ratings…";
+  try {
+    const r = await fetch(ENDPOINT, { method: "POST", body: JSON.stringify({ kind: "results", test: TEST, key }) });
+    const j = await r.json();
+    if (!j.ok) {
+      keySet("");
+      $("rMsg").textContent = j.error === "not allowed" ? "That key is not valid (or the results view is switched off)." : "Could not load results: " + j.error;
+      $("keyForm").hidden = false; $("rBody").hidden = true; $("rRefresh").hidden = true;
+      return;
+    }
+    keySet(key); R.data = j; $("rRefresh").hidden = false; renderResults();
+  } catch {
+    $("rMsg").textContent = "Could not reach the results server. Check your connection and try Refresh.";
+    $("rRefresh").hidden = false;
+  }
+}
+$("keyForm").addEventListener("submit", (e) => { e.preventDefault(); const k = $("rKey").value.trim(); if (k) loadResults(k); });
+$("rRefresh").addEventListener("click", () => { const k = keyGet(); if (k) loadResults(k); else openResults(); });
+$("backIntro").addEventListener("click", () => { try { history.replaceState(null, "", location.pathname + location.search); } catch {} show("intro"); });
+window.addEventListener("hashchange", () => { if (location.hash === "#results") openResults(); });
+$("screen").addEventListener("change", () => { R.screen = $("screen").checked; renderResults(); });
+
+function flatten() {
+  const d = R.data, c = Object.fromEntries(d.columns.map((n, i) => [n, i]));
+  const by = new Map();
+  for (const row of d.rows) {
+    const sid = row[c.session];
+    if (!by.has(sid)) by.set(sid, { sid, info: { name: row[c.listener], nativeLanguage: row[c.native_language], headphones: row[c.headphones] }, rows: [] });
+    by.get(sid).rows.push({ sid, trial: row[c.trial], position: row[c.trial_position], utterance: row[c.utterance], stim: row[c.stimulus], label: row[c.label], system: row[c.system], score: Number(row[c.score]), played: row[c.played], time: row[c.trial_finished] });
+  }
+  const done = new Set(d.finished || []);
+  return [...by.values()].map((l) => {
+    const trials = [...new Set(l.rows.map((r) => r.trial))];
+    const hrFails = trials.filter((t) => l.rows.some((r) => r.trial === t && r.system === d.hidden && r.score < 90)).length;
+    return { ...l, nTrials: trials.length, finished: done.has(l.sid), hrFails, excluded: trials.length > 0 && hrFails / trials.length > 0.15 };
+  });
+}
+function tq(df) { const t = [0, 12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228, 2.201, 2.179, 2.160, 2.145, 2.131, 2.120, 2.110, 2.101, 2.093, 2.086, 2.080, 2.074, 2.069, 2.064, 2.060, 2.056, 2.052, 2.048, 2.045, 2.042]; return df <= 0 ? NaN : df <= 30 ? t[df] : df <= 60 ? 2.0 : df <= 120 ? 1.98 : 1.96; }
+function stats(v) { const n = v.length; if (!n) return { n, mean: NaN, ci: NaN, sd: NaN }; const m = v.reduce((a, b) => a + b, 0) / n; const sd = n > 1 ? Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (n - 1)) : NaN; return { n, mean: m, sd, ci: n > 1 ? tq(n - 1) * sd / Math.sqrt(n) : NaN }; }
+const f1 = (x) => (Number.isFinite(x) ? x.toFixed(1) : "–");
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function renderResults() {
+  if (!R.data) return;
+  const name = Object.fromEntries(R.data.systems), order = R.data.systems.map(([s]) => s);
+  const L = flatten();
+  const used = L.filter((l) => l.nTrials > 0 && !(R.screen && l.excluded));
+  $("rMsg").hidden = L.length > 0;
+  $("rMsg").textContent = L.length ? "" : "No ratings yet. They appear here as soon as a listener finishes a trial; use Refresh.";
+  $("rBody").hidden = L.length === 0;
+  const trialsDone = used.reduce((a, l) => a + l.nTrials, 0);
+  $("chips").innerHTML = [[used.length, "listeners used"], [L.filter((l) => l.finished).length, "finished the test"], [trialsDone, "trials rated"], [L.filter((l) => l.excluded).length, "fail post-screening"]]
+    .map(([v, l]) => `<div class="chip"><b>${v}</b><span>${l}</span></div>`).join("");
+  const by = {};
+  for (const l of used) for (const r of l.rows) (by[r.system] ||= []).push(r.score);
+  const systems = [...order.filter((s) => by[s]), ...Object.keys(by).filter((s) => !order.includes(s))];
+  const st = systems.map((s) => ({ s, label: name[s] || s, ...stats(by[s]) }));
+  $("chart").innerHTML = chartSVG(st);
+  $("sysTable").innerHTML = `<thead><tr><th>System</th><th class="num">Mean</th><th class="num">± 95% CI</th><th class="num">SD</th><th class="num">Ratings</th></tr></thead><tbody>` +
+    st.map((x) => `<tr><td>${esc(x.label)}</td><td class="num">${f1(x.mean)}</td><td class="num">${f1(x.ci)}</td><td class="num">${f1(x.sd)}</td><td class="num">${x.n}</td></tr>`).join("") + "</tbody>";
+  $("lisTable").innerHTML = `<thead><tr><th>Name / ID</th><th>Native language</th><th>Headphones</th><th class="num">Trials</th><th class="num">Hidden ref &lt; 90</th><th>Screening</th><th>Finished</th></tr></thead><tbody>` +
+    L.map((l) => `<tr><td>${esc(l.info.name || "anonymous")}</td><td>${esc(l.info.nativeLanguage || "–")}</td><td>${esc(l.info.headphones || "–")}</td><td class="num">${l.nTrials}/${R.data.trials}</td><td class="num">${l.hrFails}</td><td>${l.excluded ? '<span class="pill out">Exclude</span>' : '<span class="pill ok">Keep</span>'}</td><td>${l.finished ? "yes" : "not yet"}</td></tr>`).join("") + "</tbody>";
+  R.last = { L };
+}
+function chartSVG(st) {
+  if (!st.length) return "";
+  const W = 640, lab = 168, right = 16, rowH = 30, top = 22, H = top + st.length * rowH + 8;
+  const x = (v) => lab + (W - lab - right) * v / 100;
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Mean MUSHRA score per system with 95% confidence intervals">`;
+  s += `<g class="axis">`;
+  for (let v = 0; v <= 100; v += 20) s += `<line class="grid" x1="${x(v)}" x2="${x(v)}" y1="${top - 4}" y2="${H - 6}"/><text x="${x(v)}" y="12" text-anchor="middle">${v}</text>`;
+  s += `</g>`;
+  st.forEach((d, i) => {
+    const cy = top + i * rowH + rowH / 2;
+    s += `<g><title>${esc(`${d.label}: ${f1(d.mean)} ± ${f1(d.ci)} (n = ${d.n})`)}</title><rect class="hit" x="0" y="${cy - rowH / 2}" width="${W}" height="${rowH}"/>`;
+    s += `<text x="${lab - 10}" y="${cy + 4}" text-anchor="end">${esc(d.label)}</text>`;
+    if (Number.isFinite(d.ci)) s += `<line class="whisk" x1="${x(Math.max(0, d.mean - d.ci))}" x2="${x(Math.min(100, d.mean + d.ci))}" y1="${cy}" y2="${cy}"/>`;
+    if (Number.isFinite(d.mean)) s += `<circle class="dot" cx="${x(d.mean)}" cy="${cy}" r="6"/>`;
+    s += `</g>`;
+  });
+  return s + `</svg>`;
+}
+function csv() {
+  const { L } = R.last || { L: [] };
+  const head = ["session", "name", "native_language", "headphones", "trial", "trial_position", "utterance", "stimulus_id", "sample_letter", "system", "score", "played", "trial_finished_at", "fails_post_screening"];
+  const q = (v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [head.join(",")];
+  for (const l of L) for (const r of l.rows) lines.push([r.sid, l.info.name, l.info.nativeLanguage, l.info.headphones, r.trial, r.position, r.utterance, r.stim, r.label, r.system, r.score, r.played, r.time, l.excluded].map(q).join(","));
+  return lines.join("\n") + "\n";
+}
+$("csvSave").addEventListener("click", () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv()], { type: "text/csv" }));
+  a.download = TEST + "_results.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  $("csvStatus").textContent = "Downloaded.";
+});
+
 initIntro();
+if (location.hash === "#results") openResults();
 })();
 </script>
 </body>
