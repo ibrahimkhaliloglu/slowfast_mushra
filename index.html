@@ -87,12 +87,25 @@ button { font: inherit; cursor: pointer; }
 .refbtn .meta { display: grid; }
 .refbtn .meta b { font-family: var(--font-display); font-size: 17px; }
 .refbtn .meta span { font-size: 13px; color: var(--muted); }
-.playhead { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); width: calc(var(--p, 0) * 100%); }
+.refbtn.on { box-shadow: inset 0 0 0 2px var(--accent); }
+/* time bar: the reference's waveform, the play position of whatever is playing, and an optional repeating part */
+.transport { display: grid; gap: 6px; }
+.wave { position: relative; height: 64px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.wave canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wave .sel { position: absolute; top: 0; bottom: 0; background: var(--accent-soft); border-inline: 2px solid var(--accent); }
+.wave .head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); pointer-events: none; }
+.tline { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-size: 13px; color: var(--muted); }
+.tline .time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.linkbtn { border: 0; background: none; color: var(--accent); padding: 0; font-weight: 600; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
+.rtools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.keys { font-size: 12px; color: var(--muted); }
+kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--surface); color: var(--ink); }
 .icon { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); }
 .icon svg { width: 14px; height: 14px; fill: currentColor; }
 .rate { display: grid; gap: 6px; }
 .rrow, .scalehead { display: grid; grid-template-columns: 44px 22px minmax(0, 1fr) 34px; gap: 8px; align-items: center; }
-.rrow { padding: 6px 0; border-top: 1px solid var(--line); }
+.rrow { padding: 6px 8px; margin-inline: -8px; border-top: 1px solid var(--line); border-radius: 6px; }
+.rrow.playing { background: var(--accent-soft); }
 .scalehead { font-size: clamp(10px, 2.6vw, 12px); color: var(--muted); }
 .scalehead .bands { grid-column: 3; display: grid; grid-template-columns: repeat(5, 1fr); text-align: center; padding-inline: 11px; }
 .scalehead .bands span { overflow: hidden; text-overflow: clip; white-space: nowrap; }
@@ -155,7 +168,9 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
       <ul class="steps">
         <li>Use headphones in a quiet room. Set a comfortable volume on the first reference and keep it.</li>
         <li>There are <b>10 trials</b>, one sentence each, about 20 minutes in total.</li>
-        <li>In each trial, play the <b>Reference</b> (the original recording), then play every sample A–J. You can switch between them while they play and replay them as often as you like.</li>
+        <li>In each trial, play the <b>Reference</b> (the original recording), then play every sample A–J. You can switch between them while they play and replay them as often as you like: the new one carries on from the same moment of the sentence.</li>
+        <li>The <b>time bar</b> under the reference shows where you are in the sentence. Click it to jump to a moment, or drag across a part of it to repeat just that part (one word, say) while you switch between samples.</li>
+        <li>A quick way through: first find the hidden reference and the clearly worst sample, then compare the rest. <b>Sort by score</b> puts the samples in the order of your ratings, so you can compare neighbours and adjust.</li>
         <li>Rate each sample from 0 to 100 for overall quality compared with the reference: how natural and how clear it sounds, and how close it is to the reference.</li>
         <li>One of the samples is the reference itself, hidden. Find it and rate it <b>100</b>. Each trial needs at least one sample at 100 before you can continue.</li>
       </ul>
@@ -191,9 +206,23 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
     <button class="refbtn" id="refBtn" type="button">
       <span class="icon" id="refIcon"></span>
       <span class="meta"><b>Reference</b><span>Original recording. Rate the samples against this.</span></span>
-      <span class="playhead"></span>
     </button>
+    <div class="transport">
+      <div class="wave" id="wave" role="slider" tabindex="0" aria-label="Position in the sentence" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+        <div class="sel" id="sel" hidden></div><canvas id="waveCv"></canvas><div class="head" id="head"></div>
+      </div>
+      <div class="tline">
+        <span class="time" id="tTime">0:00.0 / 0:00.0</span>
+        <span id="selInfo">Click to jump, drag to repeat a part.</span>
+        <button class="linkbtn" id="selClear" type="button" hidden>Play the whole sentence</button>
+      </div>
+    </div>
     <div class="panel rate" id="rate">
+      <div class="rtools">
+        <button class="btn ghost small" id="sortBtn" type="button">Sort by score</button>
+        <button class="btn ghost small" id="origBtn" type="button" hidden>Original order</button>
+        <span class="keys">Keys: <kbd>R</kbd> reference, <kbd>A</kbd>–<kbd id="lastKey">J</kbd> samples, <kbd>Space</kbd> pause, <kbd>←</kbd><kbd>→</kbd> 1 s</span>
+      </div>
       <div class="scalehead" aria-hidden="true"><span></span><span></span><div class="bands"><span>Bad</span><span>Poor</span><span>Fair</span><span>Good</span><span>Excellent</span></div><span></span></div>
       <div id="rows"></div>
     </div>
@@ -258,7 +287,7 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
 
 <script>
 (() => {
-const TRIALS = [{"id":"t1","ref":"f34b5e157b","stimuli":["55e953e93b","fbc4c2d54c","6f1a033698","098f9d8f0a","fbf4761068","cfa2e74eca","e121b44269","297fe82b44","bec99ae8ec","fb13f5a6c9"]},{"id":"t2","ref":"9a61e833b7","stimuli":["fb94134cd6","1cdc4ba4fd","a1a4a33a6c","c3f518fade","8cca51eab5","689c74d113","f76d431103","25cb32cc93","376366d793","42bfb211f8"]},{"id":"t3","ref":"01bcf69010","stimuli":["3a8d927cf4","376a935247","707e559150","514374e786","7ea1a6fa28","6f4577784e","76c61c8160","f3953ecf75","0e52d82876","a3a31e9dce"]},{"id":"t4","ref":"c65d8e497c","stimuli":["500ea73236","4474b5a807","85183d5072","faf5eda58c","d09425d73f","53d346bed0","5a2ef0f252","97a9a80baf","f570338a67","add9902fa9"]},{"id":"t5","ref":"895e647ea8","stimuli":["481abeb975","515c229173","4c36cdf356","761e18e034","86c18befc5","d0ee271f7f","722919414e","f71c601836","4eb3c4506e","1d4708aa92"]},{"id":"t6","ref":"0e87c55ce0","stimuli":["681293bf28","d1eafa62dc","7c2c5e9a73","21267efdfb","d18866ba6f","c3306b9eee","21c560a272","b62f3412a5","d2f55f4a40","ed9084a1d5"]},{"id":"t7","ref":"ba21070c16","stimuli":["6754cbcf94","cab1eec1f8","32414974bd","18a15688c8","8c2ab27cae","3651eeb392","bcb5989bdc","1b99e08b21","1409d88119","1941cd11ba"]},{"id":"t8","ref":"10990c895f","stimuli":["7568f4128c","3839e4db65","b0c1cb09bd","9938ac45c8","0252fa7c04","d362a84e04","242ec4f173","579771846e","653448bd24","aeaad58317"]},{"id":"t9","ref":"a9fd2f35a1","stimuli":["222b5a0d37","18f725c2eb","1852cc3aab","d6d37f74f8","a4445a601f","4cb4affc92","78a3c8dfc3","436111eb7f","d1a03a78ee","563715b339"]},{"id":"t10","ref":"0a43e3963f","stimuli":["4c00007d80","aa381f52d1","71240c0368","c3859541a3","f1ba9b1f76","6396d72d9d","a3512eec8a","cbfaf16286","3dbfed8296","4b3b559801"]}];
+const TRIALS = [{"id":"t1","ref":"f34b5e157b","stimuli":["55e953e93b","fbc4c2d54c","6f1a033698","098f9d8f0a","fbf4761068","cfa2e74eca","e121b44269","297fe82b44","bec99ae8ec","eff303b21b"]},{"id":"t2","ref":"9a61e833b7","stimuli":["fb94134cd6","1cdc4ba4fd","a1a4a33a6c","c3f518fade","8cca51eab5","689c74d113","f76d431103","25cb32cc93","376366d793","b80f2a1303"]},{"id":"t3","ref":"01bcf69010","stimuli":["3a8d927cf4","376a935247","707e559150","514374e786","7ea1a6fa28","6f4577784e","76c61c8160","f3953ecf75","0e52d82876","2f7e82fd0f"]},{"id":"t4","ref":"c65d8e497c","stimuli":["500ea73236","4474b5a807","85183d5072","faf5eda58c","d09425d73f","53d346bed0","5a2ef0f252","97a9a80baf","f570338a67","7d772a19f6"]},{"id":"t5","ref":"895e647ea8","stimuli":["481abeb975","515c229173","4c36cdf356","761e18e034","86c18befc5","d0ee271f7f","722919414e","f71c601836","4eb3c4506e","436410e75b"]},{"id":"t6","ref":"0e87c55ce0","stimuli":["681293bf28","d1eafa62dc","7c2c5e9a73","21267efdfb","d18866ba6f","c3306b9eee","21c560a272","b62f3412a5","d2f55f4a40","1ee1e0385d"]},{"id":"t7","ref":"ba21070c16","stimuli":["6754cbcf94","cab1eec1f8","32414974bd","18a15688c8","8c2ab27cae","3651eeb392","bcb5989bdc","1b99e08b21","1409d88119","0926c232f7"]},{"id":"t8","ref":"10990c895f","stimuli":["7568f4128c","3839e4db65","b0c1cb09bd","9938ac45c8","0252fa7c04","d362a84e04","242ec4f173","579771846e","653448bd24","b3c4338a53"]},{"id":"t9","ref":"a9fd2f35a1","stimuli":["222b5a0d37","18f725c2eb","1852cc3aab","d6d37f74f8","a4445a601f","4cb4affc92","78a3c8dfc3","436111eb7f","d1a03a78ee","4f887d659b"]},{"id":"t10","ref":"0a43e3963f","stimuli":["4c00007d80","aa381f52d1","71240c0368","c3859541a3","f1ba9b1f76","6396d72d9d","a3512eec8a","cbfaf16286","3dbfed8296","3faaf68d35"]}];
 const TEST = "ult2mel-01fi-v1";
 const LS_KEY = "mushra-" + TEST;
 const LETTERS = "ABCDEFGHIJKL";
@@ -313,28 +342,57 @@ const audio = (() => {
     }
     return bufs.get(id);
   }
-  function pos() { if (!cur) return 0; return (ctx.currentTime - cur.t0) + cur.off; }
+  // All files of a trial have the same length, so one position (s) holds for all of them. `cursor` is where the next
+  // play starts (kept on pause, so play resumes there); `loop` is the part {a, b} that repeats, or null.
+  let cursor = 0, loop = null, dur = 0, last = null;
+  function pos() {
+    if (!cur) return cursor;
+    let p = cur.off + (ctx.currentTime - cur.t0);
+    if (cur.loop && p >= cur.loop.b) p = cur.loop.a + (p - cur.loop.a) % (cur.loop.b - cur.loop.a);
+    return Math.min(p, cur.dur);
+  }
+  function start(id, buf, off) {
+    halt();
+    const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination);
+    let lp = null;
+    if (loop) {
+      lp = { a: loop.a, b: Math.min(loop.b, buf.duration) };
+      src.loop = true; src.loopStart = lp.a; src.loopEnd = lp.b;
+      if (off < lp.a || off >= lp.b - 0.02) off = lp.a;
+    } else if (off >= buf.duration - 0.05) off = 0;
+    src.onended = () => { if (cur && cur.src === src) { cur = null; cursor = 0; emit(); } };
+    src.start(0, off);
+    cur = { id, src, t0: ctx.currentTime, off, dur: buf.duration, loop: lp };
+    last = id; emit(); tick();
+  }
+  // Clicking the sample that is playing pauses it; any other starts from the current position
   async function play(id) {
     unlock();
-    if (cur && cur.id === id) { stop(); return; }
+    if (cur && cur.id === id) { pause(); return; }
     const buf = await load(id);
-    let off = 0;
-    if (cur) { off = pos(); if (off >= buf.duration - 0.05) off = 0; halt(); }
-    const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination);
-    src.onended = () => { if (cur && cur.src === src) { cur = null; emit(); } };
-    src.start(0, off);
-    cur = { id, src, t0: ctx.currentTime, off, dur: buf.duration };
-    emit(); tick();
+    start(id, buf, pos());
   }
   function halt() { if (cur) { cur.src.onended = null; try { cur.src.stop(); } catch {} cur = null; } }
-  function stop() { halt(); emit(); }
+  function pause() { cursor = pos(); halt(); emit(); }
+  function stop() { halt(); cursor = loop ? loop.a : 0; emit(); }
+  function toggle() { if (cur) pause(); else if (last) play(last); }
+  function seek(t) {
+    t = Math.max(0, Math.min(dur, t));
+    if (cur) start(cur.id, cur.src.buffer, t); else { cursor = t; emit(); }
+  }
+  function setLoop(a, b) {  // null: no repeating part
+    loop = a == null ? null : { a: Math.max(0, a), b: Math.min(dur, b) };
+    if (cur) start(cur.id, cur.src.buffer, pos()); else { if (loop) cursor = loop.a; emit(); }
+  }
+  function reset(d) { halt(); cursor = 0; loop = null; last = null; dur = d || 0; emit(); }
   function tick() {
     cancelAnimationFrame(raf);
-    const step = () => { for (const f of listeners) f(cur ? cur.id : null, cur ? Math.min(1, pos() / cur.dur) : 0); if (cur) raf = requestAnimationFrame(step); };
+    const step = () => { emit(); if (cur) raf = requestAnimationFrame(step); };
     raf = requestAnimationFrame(step);
   }
-  function emit() { for (const f of listeners) f(cur ? cur.id : null, cur ? Math.min(1, pos() / cur.dur) : 0); }
-  return { unlock, load, play, stop, on: (f) => listeners.add(f), playing: () => (cur ? cur.id : null) };
+  function emit() { for (const f of listeners) f(cur ? cur.id : null, pos(), dur, loop); }
+  return { unlock, load, play, pause, stop, toggle, seek, setLoop, reset, on: (f) => listeners.add(f),
+    playing: () => (cur ? cur.id : null), pos, loop: () => loop, setDur: (d) => { dur = d; emit(); } };
 })();
 $("stop").addEventListener("click", () => audio.stop());
 
@@ -344,35 +402,126 @@ function startTrial() {
   if (S.idx >= S.order.length) return finish();
   const t = TRIALS[S.order[S.idx]];
   const stims = S.perms[t.id];
-  T = { t, stims, scores: Object.fromEntries(stims.map((s) => [s, 0])), played: new Set(), refPlayed: false, t0: new Date().toISOString(), loadErr: false };
+  T = { t, stims, scores: Object.fromEntries(stims.map((s) => [s, 0])), played: new Set(), refPlayed: false, t0: new Date().toISOString(), loadErr: false, sorts: 0, loops: 0 };
   $("tTitle").textContent = `Trial ${S.idx + 1} of ${S.order.length}`;
   $("tProg").style.width = (S.idx / S.order.length * 100) + "%";
   $("next").textContent = S.idx === S.order.length - 1 ? "Finish" : "Next trial";
+  $("lastKey").textContent = LETTERS[stims.length - 1];
   const rows = $("rows"); rows.textContent = "";
   stims.forEach((s, i) => {
-    const r = document.createElement("div"); r.className = "rrow"; r.dataset.stim = s;
+    const r = document.createElement("div"); r.className = "rrow"; r.dataset.stim = s; r.dataset.i = i;
     r.innerHTML = `<button class="pbtn" type="button" aria-label="Play sample ${LETTERS[i]}">${ICON_PLAY}</button><span class="letter">${LETTERS[i]}</span><input type="range" min="0" max="100" step="1" value="0" id="s-${t.id}-${i}" aria-label="Score for sample ${LETTERS[i]}"><span class="val">0</span>`;
     const btn = r.querySelector("button"), rng = r.querySelector("input"), val = r.querySelector(".val");
-    btn.addEventListener("click", () => { T.played.add(s); btn.classList.add("played"); audio.play(s).catch(loadFail); check(); });
+    btn.addEventListener("click", () => playStim(i));
     rng.addEventListener("input", () => { const v = +rng.value; T.scores[s] = v; val.textContent = v; val.classList.toggle("top", v === 100); check(); });
     rows.appendChild(r);
   });
+  $("origBtn").hidden = true;
   $("refIcon").innerHTML = ICON_PLAY;
-  [t.ref, ...stims].forEach((id) => audio.load(id).catch(loadFail));
+  audio.reset(0); wave.buf = null; drawWave();
+  audio.load(t.ref).then((buf) => { if (T && T.t === t) { audio.setDur(buf.duration); wave.buf = buf; drawWave(); } }, loadFail);
+  stims.forEach((id) => audio.load(id).catch(loadFail));
   check();
   show("trial");
 }
+function playStim(i) {
+  const s = T.stims[i], b = $("rows").querySelector(`[data-i="${i}"] .pbtn`);
+  T.played.add(s); b.classList.add("played"); audio.play(s).catch(loadFail); check();
+}
+function playRef() { T.refPlayed = true; audio.play(T.t.ref).catch(loadFail); }
 function loadFail() { T.loadErr = true; $("tStatus").textContent = "A sound file did not load. Check your connection and reload the page; your progress is kept."; $("tStatus").className = "status bad"; }
-$("refBtn").addEventListener("click", () => { T.refPlayed = true; audio.play(T.t.ref).catch(loadFail); });
-audio.on((id, p) => {
+$("refBtn").addEventListener("click", playRef);
+const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
+audio.on((id, p, d, lp) => {
   if (!T) return;
-  const ref = $("refBtn");
-  ref.style.setProperty("--p", id === T.t.ref ? p : 0);
-  $("refIcon").innerHTML = id === T.t.ref ? ICON_STOP : ICON_PLAY;
+  const on = id === T.t.ref;
+  if ($("refBtn").classList.contains("on") !== on) { $("refBtn").classList.toggle("on", on); $("refIcon").innerHTML = on ? ICON_STOP : ICON_PLAY; }
   for (const r of $("rows").children) {
     const on = r.dataset.stim === id, b = r.querySelector("button");
-    if (b.classList.contains("on") !== on) { b.classList.toggle("on", on); b.innerHTML = on ? ICON_STOP : ICON_PLAY; }
+    if (b.classList.contains("on") !== on) { b.classList.toggle("on", on); r.classList.toggle("playing", on); b.innerHTML = on ? ICON_STOP : ICON_PLAY; }
   }
+  $("tTime").textContent = `${fmt(p)} / ${fmt(d)}`;
+  $("head").style.left = (d ? p / d * 100 : 0) + "%";
+  $("wave").setAttribute("aria-valuemax", d.toFixed(1)); $("wave").setAttribute("aria-valuenow", p.toFixed(1));
+  if (!wave.drag) showSel(lp, d);
+});
+
+/* ---------- time bar: click to jump, drag to repeat a part ---------- */
+const wave = { buf: null, drag: null };
+function drawWave() {
+  const cv = $("waveCv"), w = cv.clientWidth, h = cv.clientHeight, dpr = window.devicePixelRatio || 1;
+  if (!w) return;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  if (!wave.buf) return;
+  const x = wave.buf.getChannelData(0), per = Math.max(1, Math.floor(x.length / w));
+  const peaks = []; let top = 1e-6;
+  for (let i = 0; i < w; i++) {
+    let m = 0; const s = i * per, e = Math.min(x.length, s + per);
+    for (let j = s; j < e; j++) { const v = Math.abs(x[j]); if (v > m) m = v; }
+    peaks.push(m); if (m > top) top = m;
+  }
+  g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--muted").trim() || "#888";
+  g.globalAlpha = 0.55;
+  peaks.forEach((m, i) => { const a = Math.max(0.5, m / top * (h / 2 - 4)); g.fillRect(i, h / 2 - a, 1, 2 * a); });
+}
+function showSel(lp, d) {
+  const sel = $("sel");
+  sel.hidden = !lp || !d;
+  if (lp && d) { sel.style.left = (lp.a / d * 100) + "%"; sel.style.width = ((lp.b - lp.a) / d * 100) + "%"; }
+  $("selClear").hidden = !lp;
+  $("selInfo").textContent = lp ? `Repeating ${fmt(lp.a)}–${fmt(lp.b)}.` : "Click to jump, drag to repeat a part.";
+}
+function timeAt(e) {
+  const r = $("wave").getBoundingClientRect(), d = wave.buf ? wave.buf.duration : 0;
+  return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * d;
+}
+$("wave").addEventListener("pointerdown", (e) => {
+  if (!wave.buf) return;
+  $("wave").setPointerCapture(e.pointerId);
+  wave.drag = { x0: e.clientX, t0: timeAt(e), moved: false };
+});
+$("wave").addEventListener("pointermove", (e) => {
+  const g = wave.drag; if (!g) return;
+  if (Math.abs(e.clientX - g.x0) > 5) g.moved = true;
+  if (g.moved) { const t = timeAt(e); showSel({ a: Math.min(t, g.t0), b: Math.max(t, g.t0) }, wave.buf.duration); }
+});
+$("wave").addEventListener("pointerup", (e) => {
+  const g = wave.drag; if (!g) return;
+  wave.drag = null;
+  const t = timeAt(e), lp = audio.loop();
+  if (g.moved && Math.abs(t - g.t0) >= 0.15) { T.loops++; audio.setLoop(Math.min(t, g.t0), Math.max(t, g.t0)); return; }
+  if (lp && (t < lp.a || t > lp.b)) audio.setLoop(null);  // a click outside the repeating part ends it
+  audio.seek(t);
+});
+$("wave").addEventListener("pointercancel", () => { wave.drag = null; showSel(audio.loop(), wave.buf ? wave.buf.duration : 0); });
+$("wave").addEventListener("keydown", (e) => {
+  if (e.key === "Home") { audio.seek(audio.loop() ? audio.loop().a : 0); e.preventDefault(); }
+});
+$("selClear").addEventListener("click", () => audio.setLoop(null));
+window.addEventListener("resize", () => { if (T) drawWave(); });
+
+/* ---------- sorting and keys ---------- */
+function order(by) {
+  const rows = [...$("rows").children];
+  rows.sort(by === "score" ? (a, b) => T.scores[b.dataset.stim] - T.scores[a.dataset.stim] || a.dataset.i - b.dataset.i : (a, b) => a.dataset.i - b.dataset.i);
+  for (const r of rows) $("rows").appendChild(r);
+}
+$("sortBtn").addEventListener("click", () => { T.sorts++; order("score"); $("origBtn").hidden = false; });
+$("origBtn").addEventListener("click", () => { order("orig"); $("origBtn").hidden = true; });
+document.addEventListener("keydown", (e) => {
+  if ($("trial").hidden || !T || e.ctrlKey || e.metaKey || e.altKey) return;
+  const el = document.activeElement, tag = el ? el.tagName : "";
+  if (tag === "TEXTAREA" || (tag === "INPUT" && el.type !== "range")) return;
+  const k = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+  const i = LETTERS.indexOf(k);
+  if (k === "R") playRef();
+  else if (i >= 0 && i < T.stims.length) playStim(i);
+  else if (k === " " && tag !== "BUTTON") audio.toggle();
+  else if (k === "Escape") audio.stop();
+  else if ((k === "ArrowLeft" || k === "ArrowRight") && tag !== "INPUT") audio.seek(audio.pos() + (k === "ArrowLeft" ? -1 : 1));
+  else return;
+  e.preventDefault();
 });
 function check() {
   if (T.loadErr) return;
@@ -388,7 +537,8 @@ function check() {
 $("next").addEventListener("click", () => {
   audio.stop();
   const rec = { trial: T.t.id, position: S.idx + 1, startedAt: T.t0, finishedAt: new Date().toISOString(),
-    ratings: T.stims.map((s, i) => ({ stim: s, label: LETTERS[i], score: T.scores[s], played: T.played.has(s) })) };
+    ratings: T.stims.map((s, i) => ({ stim: s, label: LETTERS[i], score: T.scores[s], played: T.played.has(s) })),
+    sorts: T.sorts, loops: T.loops };
   S.recs[T.t.id] = rec; S.idx += 1; lsSet(S);
   save(rec);
   startTrial();
