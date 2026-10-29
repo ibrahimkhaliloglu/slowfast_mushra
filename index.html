@@ -176,7 +176,7 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
         <li>There are <b>10 trials</b>, one sentence each, about 20 minutes in total.</li>
         <li>In each trial, play the <b>Reference</b> (the original recording), then play every sample A–J. You can switch between them while they play and replay them as often as you like: the new one carries on from the same moment of the sentence.</li>
         <li>The <b>time bar</b> under the reference, and the lane under each sample, show where you are in the sentence (they all show the reference's waveform as a guide). Click a sample's lane to play it from that moment, or drag across a part, one word say, to repeat just that part; the same part then repeats on every sample you switch to.</li>
-        <li>A quick way through: first find the hidden reference and the clearly worst sample, then compare the rest. <b>Sort by score</b> puts the samples in the order of your ratings, so you can compare neighbours and adjust.</li>
+        <li>A quick way through: first find the hidden reference and the clearly worst sample, then compare the rest. <b>Sort by score</b> puts the samples in the order of your ratings, so you can compare neighbours and adjust. <b>⇄ Swap</b> (or <kbd>X</kbd>) flips between the last two sounds you played, e.g. two samples or a sample and the reference, without stopping: press it as often as you like.</li>
         <li>Rate each sample from 0 to 100 for overall quality compared with the reference: how natural and how clear it sounds, and how close it is to the reference.</li>
         <li>One of the samples is the reference itself, hidden. Find it and rate it <b>100</b>. Each trial needs at least one sample at 100 before you can continue.</li>
       </ul>
@@ -226,8 +226,9 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
     <div class="panel rate" id="rate">
       <div class="rtools">
         <button class="btn ghost small" id="sortBtn" type="button">Sort by score</button>
+        <button class="btn small" id="swapBtn" type="button" disabled title="Switch between the last two you played, at the same moment">⇄ Swap</button>
         <button class="btn ghost small" id="origBtn" type="button" hidden>Original order</button>
-        <span class="keys">Keys: <kbd>R</kbd> reference, <kbd>A</kbd>–<kbd id="lastKey">J</kbd> samples, <kbd>Space</kbd> pause, <kbd>←</kbd><kbd>→</kbd> 1 s</span>
+        <span class="keys">Keys: <kbd>R</kbd> reference, <kbd>A</kbd>–<kbd id="lastKey">J</kbd> samples, <kbd>X</kbd> swap, <kbd>Space</kbd> pause, <kbd>←</kbd><kbd>→</kbd> 1 s</span>
       </div>
       <div class="scalehead" aria-hidden="true"><span></span><span></span><div class="bands"><span>Bad</span><span>Poor</span><span>Fair</span><span>Good</span><span>Excellent</span></div><span></span></div>
       <div id="rows"></div>
@@ -350,7 +351,7 @@ const audio = (() => {
   }
   // All files of a trial have the same length, so one position (s) holds for all of them. `cursor` is where the next
   // play starts (kept on pause, so play resumes there); `loop` is the part {a, b} that repeats, or null.
-  let cursor = 0, loop = null, dur = 0, last = null;
+  let cursor = 0, loop = null, dur = 0, last = null, prev = null;  // last, prev: the two files played most recently (A/B swap)
   function pos() {
     if (!cur) return cursor;
     let p = cur.off + (ctx.currentTime - cur.t0);
@@ -369,7 +370,8 @@ const audio = (() => {
     src.onended = () => { if (cur && cur.src === src) { cur = null; cursor = 0; emit(); } };
     src.start(0, off);
     cur = { id, src, t0: ctx.currentTime, off, dur: buf.duration, loop: lp };
-    last = id; emit(); tick();
+    if (id !== last) { prev = last; last = id; }
+    emit(); tick();
   }
   // Clicking the sample that is playing pauses it; any other starts from the current position
   async function play(id) {
@@ -396,7 +398,7 @@ const audio = (() => {
     const buf = await load(id);
     start(id, buf, Math.max(0, Math.min(buf.duration, t)));
   }
-  function reset(d) { halt(); cursor = 0; loop = null; last = null; dur = d || 0; emit(); }
+  function reset(d) { halt(); cursor = 0; loop = null; last = null; prev = null; dur = d || 0; emit(); }
   function tick() {
     cancelAnimationFrame(raf);
     const step = () => { emit(); if (cur) raf = requestAnimationFrame(step); };
@@ -404,7 +406,7 @@ const audio = (() => {
   }
   function emit() { for (const f of listeners) f(cur ? cur.id : null, pos(), dur, loop); }
   return { unlock, load, play, playFrom, pause, stop, toggle, seek, setLoop, reset, on: (f) => listeners.add(f),
-    playing: () => (cur ? cur.id : null), pos, loop: () => loop, setDur: (d) => { dur = d; emit(); } };
+    playing: () => (cur ? cur.id : null), pair: () => [last, prev], pos, loop: () => loop, setDur: (d) => { dur = d; emit(); } };
 })();
 $("stop").addEventListener("click", () => audio.stop());
 
@@ -414,7 +416,7 @@ function startTrial() {
   if (S.idx >= S.order.length) return finish();
   const t = TRIALS[S.order[S.idx]];
   const stims = S.perms[t.id];
-  T = { t, stims, scores: Object.fromEntries(stims.map((s) => [s, 0])), played: new Set(), refPlayed: false, t0: new Date().toISOString(), loadErr: false, sorts: 0, loops: 0 };
+  T = { t, stims, scores: Object.fromEntries(stims.map((s) => [s, 0])), played: new Set(), refPlayed: false, t0: new Date().toISOString(), loadErr: false, sorts: 0, loops: 0, swaps: 0 };
   $("tTitle").textContent = `Trial ${S.idx + 1} of ${S.order.length}`;
   $("tProg").style.width = (S.idx / S.order.length * 100) + "%";
   $("next").textContent = S.idx === S.order.length - 1 ? "Finish" : "Next trial";
@@ -453,6 +455,14 @@ function playStim(i, t, b) {
   check();
 }
 function playRef() { T.refPlayed = true; audio.play(T.t.ref).catch(loadFail); }
+// A/B: switch to the other of the last two sounds played, from the same moment (keeps playing, or stays paused there)
+function swap() {
+  const other = audio.pair()[1]; if (!other) return;
+  if (other === T.t.ref) playRef(); else playStim(T.stims.indexOf(other));
+  T.swaps++;
+}
+const soundName = (id) => (id === T.t.ref ? "Reference" : LETTERS[T.stims.indexOf(id)]);
+$("swapBtn").addEventListener("click", swap);
 function loadFail() { T.loadErr = true; $("tStatus").textContent = "A sound file did not load. Check your connection and reload the page; your progress is kept."; $("tStatus").className = "status bad"; }
 $("refBtn").addEventListener("click", playRef);
 const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
@@ -466,6 +476,9 @@ audio.on((id, p, d, lp) => {
     if (on) h.style.left = (d ? p / d * 100 : 0) + "%";
   }
   $("tTime").textContent = `${fmt(p)} / ${fmt(d)}`;
+  const [a, b] = audio.pair();
+  $("swapBtn").disabled = !b;
+  $("swapBtn").textContent = b ? `⇄ Swap ${soundName(a)} ↔ ${soundName(b)}` : "⇄ Swap";
   $("head").style.left = (d ? p / d * 100 : 0) + "%";
   $("wave").setAttribute("aria-valuemax", d.toFixed(1)); $("wave").setAttribute("aria-valuenow", p.toFixed(1));
   if (!wave.drag) showSel(lp, d);
@@ -554,6 +567,7 @@ document.addEventListener("keydown", (e) => {
   const k = e.key.length === 1 ? e.key.toUpperCase() : e.key;
   const i = LETTERS.indexOf(k);
   if (k === "R") playRef();
+  else if (k === "X") swap();
   else if (i >= 0 && i < T.stims.length) playStim(i);
   else if (k === " " && tag !== "BUTTON") audio.toggle();
   else if (k === "Escape") audio.stop();
@@ -576,7 +590,7 @@ $("next").addEventListener("click", () => {
   audio.stop();
   const rec = { trial: T.t.id, position: S.idx + 1, startedAt: T.t0, finishedAt: new Date().toISOString(),
     ratings: T.stims.map((s, i) => ({ stim: s, label: LETTERS[i], score: T.scores[s], played: T.played.has(s) })),
-    sorts: T.sorts, loops: T.loops };
+    sorts: T.sorts, loops: T.loops, swaps: T.swaps };
   S.recs[T.t.id] = rec; S.idx += 1; lsSet(S);
   save(rec);
   startTrial();
