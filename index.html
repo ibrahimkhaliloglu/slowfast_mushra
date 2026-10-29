@@ -106,6 +106,12 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--li
 .rrow, .scalehead { display: grid; grid-template-columns: 44px 22px minmax(0, 1fr) 34px; gap: 8px; align-items: center; }
 .rrow { padding: 6px 8px; margin-inline: -8px; border-top: 1px solid var(--line); border-radius: 6px; }
 .rrow.playing { background: var(--accent-soft); }
+.rrow { row-gap: 2px; }
+.rrow .lane { grid-column: 3; position: relative; height: 26px; border-radius: 5px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.rrow .lane canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.rrow .lane .sel { position: absolute; top: 0; bottom: 0; background: var(--accent-soft); border-inline: 2px solid var(--accent); }
+.rrow .lane .head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); pointer-events: none; }
+.rrow.playing .lane { border-color: var(--accent); }
 .scalehead { font-size: clamp(10px, 2.6vw, 12px); color: var(--muted); }
 .scalehead .bands { grid-column: 3; display: grid; grid-template-columns: repeat(5, 1fr); text-align: center; padding-inline: 11px; }
 .scalehead .bands span { overflow: hidden; text-overflow: clip; white-space: nowrap; }
@@ -169,7 +175,7 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
         <li>Use headphones in a quiet room. Set a comfortable volume on the first reference and keep it.</li>
         <li>There are <b>10 trials</b>, one sentence each, about 20 minutes in total.</li>
         <li>In each trial, play the <b>Reference</b> (the original recording), then play every sample A–J. You can switch between them while they play and replay them as often as you like: the new one carries on from the same moment of the sentence.</li>
-        <li>The <b>time bar</b> under the reference shows where you are in the sentence. Click it to jump to a moment, or drag across a part of it to repeat just that part (one word, say) while you switch between samples.</li>
+        <li>The <b>time bar</b> under the reference, and the lane under each sample, show where you are in the sentence (they all show the reference's waveform as a guide). Click a sample's lane to play it from that moment, or drag across a part, one word say, to repeat just that part; the same part then repeats on every sample you switch to.</li>
         <li>A quick way through: first find the hidden reference and the clearly worst sample, then compare the rest. <b>Sort by score</b> puts the samples in the order of your ratings, so you can compare neighbours and adjust.</li>
         <li>Rate each sample from 0 to 100 for overall quality compared with the reference: how natural and how clear it sounds, and how close it is to the reference.</li>
         <li>One of the samples is the reference itself, hidden. Find it and rate it <b>100</b>. Each trial needs at least one sample at 100 before you can continue.</li>
@@ -380,9 +386,15 @@ const audio = (() => {
     t = Math.max(0, Math.min(dur, t));
     if (cur) start(cur.id, cur.src.buffer, t); else { cursor = t; emit(); }
   }
-  function setLoop(a, b) {  // null: no repeating part
+  function setLoop(a, b, quiet) {  // null: no repeating part; quiet: don't restart what is playing (a play follows)
     loop = a == null ? null : { a: Math.max(0, a), b: Math.min(dur, b) };
+    if (quiet) return;
     if (cur) start(cur.id, cur.src.buffer, pos()); else { if (loop) cursor = loop.a; emit(); }
+  }
+  async function playFrom(id, t) {  // play this file from t (s), whatever was playing
+    unlock();
+    const buf = await load(id);
+    start(id, buf, Math.max(0, Math.min(buf.duration, t)));
   }
   function reset(d) { halt(); cursor = 0; loop = null; last = null; dur = d || 0; emit(); }
   function tick() {
@@ -391,7 +403,7 @@ const audio = (() => {
     raf = requestAnimationFrame(step);
   }
   function emit() { for (const f of listeners) f(cur ? cur.id : null, pos(), dur, loop); }
-  return { unlock, load, play, pause, stop, toggle, seek, setLoop, reset, on: (f) => listeners.add(f),
+  return { unlock, load, play, playFrom, pause, stop, toggle, seek, setLoop, reset, on: (f) => listeners.add(f),
     playing: () => (cur ? cur.id : null), pos, loop: () => loop, setDur: (d) => { dur = d; emit(); } };
 })();
 $("stop").addEventListener("click", () => audio.stop());
@@ -410,9 +422,12 @@ function startTrial() {
   const rows = $("rows"); rows.textContent = "";
   stims.forEach((s, i) => {
     const r = document.createElement("div"); r.className = "rrow"; r.dataset.stim = s; r.dataset.i = i;
-    r.innerHTML = `<button class="pbtn" type="button" aria-label="Play sample ${LETTERS[i]}">${ICON_PLAY}</button><span class="letter">${LETTERS[i]}</span><input type="range" min="0" max="100" step="1" value="0" id="s-${t.id}-${i}" aria-label="Score for sample ${LETTERS[i]}"><span class="val">0</span>`;
+    r.innerHTML = `<button class="pbtn" type="button" aria-label="Play sample ${LETTERS[i]}">${ICON_PLAY}</button><span class="letter">${LETTERS[i]}</span><input type="range" min="0" max="100" step="1" value="0" id="s-${t.id}-${i}" aria-label="Score for sample ${LETTERS[i]}"><span class="val">0</span>` +
+      `<div class="lane" aria-hidden="true"><div class="sel" hidden></div><canvas></canvas><div class="head" hidden></div></div>`;
     const btn = r.querySelector("button"), rng = r.querySelector("input"), val = r.querySelector(".val");
     btn.addEventListener("click", () => playStim(i));
+    // the sample's own lane: click plays this sample from there, drag repeats that part on this sample
+    attachLane(r.querySelector(".lane"), (t) => playStim(i, t), (a, b) => playStim(i, a, b));
     rng.addEventListener("input", () => { const v = +rng.value; T.scores[s] = v; val.textContent = v; val.classList.toggle("top", v === 100); check(); });
     rows.appendChild(r);
   });
@@ -424,9 +439,18 @@ function startTrial() {
   check();
   show("trial");
 }
-function playStim(i) {
-  const s = T.stims[i], b = $("rows").querySelector(`[data-i="${i}"] .pbtn`);
-  T.played.add(s); b.classList.add("played"); audio.play(s).catch(loadFail); check();
+// playStim(i): play/pause sample i; playStim(i, t): play it from t; playStim(i, a, b): repeat a..b on it
+function playStim(i, t, b) {
+  const s = T.stims[i], btn = $("rows").querySelector(`[data-i="${i}"] .pbtn`);
+  T.played.add(s); btn.classList.add("played");
+  if (t == null) audio.play(s).catch(loadFail);
+  else {
+    const lp = audio.loop();
+    if (b != null) audio.setLoop(t, b, true);
+    else if (lp && (t < lp.a || t > lp.b)) audio.setLoop(null, null, true);  // a click outside the repeating part ends it
+    audio.playFrom(s, t).catch(loadFail);
+  }
+  check();
 }
 function playRef() { T.refPlayed = true; audio.play(T.t.ref).catch(loadFail); }
 function loadFail() { T.loadErr = true; $("tStatus").textContent = "A sound file did not load. Check your connection and reload the page; your progress is kept."; $("tStatus").className = "status bad"; }
@@ -437,8 +461,9 @@ audio.on((id, p, d, lp) => {
   const on = id === T.t.ref;
   if ($("refBtn").classList.contains("on") !== on) { $("refBtn").classList.toggle("on", on); $("refIcon").innerHTML = on ? ICON_STOP : ICON_PLAY; }
   for (const r of $("rows").children) {
-    const on = r.dataset.stim === id, b = r.querySelector("button");
-    if (b.classList.contains("on") !== on) { b.classList.toggle("on", on); r.classList.toggle("playing", on); b.innerHTML = on ? ICON_STOP : ICON_PLAY; }
+    const on = r.dataset.stim === id, b = r.querySelector("button"), h = r.querySelector(".lane .head");
+    if (b.classList.contains("on") !== on) { b.classList.toggle("on", on); r.classList.toggle("playing", on); b.innerHTML = on ? ICON_STOP : ICON_PLAY; h.hidden = !on; }
+    if (on) h.style.left = (d ? p / d * 100 : 0) + "%";
   }
   $("tTime").textContent = `${fmt(p)} / ${fmt(d)}`;
   $("head").style.left = (d ? p / d * 100 : 0) + "%";
@@ -447,9 +472,11 @@ audio.on((id, p, d, lp) => {
 });
 
 /* ---------- time bar: click to jump, drag to repeat a part ---------- */
-const wave = { buf: null, drag: null };
-function drawWave() {
-  const cv = $("waveCv"), w = cv.clientWidth, h = cv.clientHeight, dpr = window.devicePixelRatio || 1;
+// The top bar and every sample's lane share one time axis. All of them draw the reference's waveform, so the lanes
+// look identical and show where the words are without giving away which sample is which.
+const wave = { buf: null, drag: null, peaks: null };
+function drawPeaks(cv) {
+  const w = cv.clientWidth, h = cv.clientHeight, dpr = window.devicePixelRatio || 1;
   if (!w) return;
   cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
   const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
@@ -463,38 +490,49 @@ function drawWave() {
   }
   g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--muted").trim() || "#888";
   g.globalAlpha = 0.55;
-  peaks.forEach((m, i) => { const a = Math.max(0.5, m / top * (h / 2 - 4)); g.fillRect(i, h / 2 - a, 1, 2 * a); });
+  peaks.forEach((m, i) => { const a = Math.max(0.5, m / top * (h / 2 - 2)); g.fillRect(i, h / 2 - a, 1, 2 * a); });
+}
+function drawWave() {
+  drawPeaks($("waveCv"));
+  for (const cv of $("rows").querySelectorAll(".lane canvas")) drawPeaks(cv);
 }
 function showSel(lp, d) {
-  const sel = $("sel");
-  sel.hidden = !lp || !d;
-  if (lp && d) { sel.style.left = (lp.a / d * 100) + "%"; sel.style.width = ((lp.b - lp.a) / d * 100) + "%"; }
+  for (const sel of [$("sel"), ...$("rows").querySelectorAll(".lane .sel")]) {
+    sel.hidden = !lp || !d;
+    if (lp && d) { sel.style.left = (lp.a / d * 100) + "%"; sel.style.width = ((lp.b - lp.a) / d * 100) + "%"; }
+  }
   $("selClear").hidden = !lp;
-  $("selInfo").textContent = lp ? `Repeating ${fmt(lp.a)}–${fmt(lp.b)}.` : "Click to jump, drag to repeat a part.";
+  $("selInfo").textContent = lp ? `Repeating ${fmt(lp.a)}–${fmt(lp.b)} on every sample.` : "Click to jump, drag to repeat a part.";
 }
-function timeAt(e) {
-  const r = $("wave").getBoundingClientRect(), d = wave.buf ? wave.buf.duration : 0;
-  return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * d;
+// click on a lane -> onClick(t); drag across it -> onDrag(a, b), shown on every lane while dragging
+function attachLane(el, onClick, onDrag) {
+  const timeAt = (e) => { const r = el.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (wave.buf ? wave.buf.duration : 0); };
+  el.addEventListener("pointerdown", (e) => {
+    if (!wave.buf) return;
+    el.setPointerCapture(e.pointerId);
+    wave.drag = { x0: e.clientX, t0: timeAt(e), moved: false };
+  });
+  el.addEventListener("pointermove", (e) => {
+    const g = wave.drag; if (!g) return;
+    if (Math.abs(e.clientX - g.x0) > 5) g.moved = true;
+    if (g.moved) { const t = timeAt(e); showSel({ a: Math.min(t, g.t0), b: Math.max(t, g.t0) }, wave.buf.duration); }
+  });
+  el.addEventListener("pointerup", (e) => {
+    const g = wave.drag; if (!g) return;
+    wave.drag = null;
+    const t = timeAt(e);
+    if (g.moved && Math.abs(t - g.t0) >= 0.15) { T.loops++; onDrag(Math.min(t, g.t0), Math.max(t, g.t0)); }
+    else onClick(t);
+    showSel(audio.loop(), wave.buf.duration);
+  });
+  el.addEventListener("pointercancel", () => { wave.drag = null; showSel(audio.loop(), wave.buf ? wave.buf.duration : 0); });
 }
-$("wave").addEventListener("pointerdown", (e) => {
-  if (!wave.buf) return;
-  $("wave").setPointerCapture(e.pointerId);
-  wave.drag = { x0: e.clientX, t0: timeAt(e), moved: false };
-});
-$("wave").addEventListener("pointermove", (e) => {
-  const g = wave.drag; if (!g) return;
-  if (Math.abs(e.clientX - g.x0) > 5) g.moved = true;
-  if (g.moved) { const t = timeAt(e); showSel({ a: Math.min(t, g.t0), b: Math.max(t, g.t0) }, wave.buf.duration); }
-});
-$("wave").addEventListener("pointerup", (e) => {
-  const g = wave.drag; if (!g) return;
-  wave.drag = null;
-  const t = timeAt(e), lp = audio.loop();
-  if (g.moved && Math.abs(t - g.t0) >= 0.15) { T.loops++; audio.setLoop(Math.min(t, g.t0), Math.max(t, g.t0)); return; }
+// the top bar acts on whatever is playing (or paused)
+attachLane($("wave"), (t) => {
+  const lp = audio.loop();
   if (lp && (t < lp.a || t > lp.b)) audio.setLoop(null);  // a click outside the repeating part ends it
   audio.seek(t);
-});
-$("wave").addEventListener("pointercancel", () => { wave.drag = null; showSel(audio.loop(), wave.buf ? wave.buf.duration : 0); });
+}, (a, b) => audio.setLoop(a, b));
 $("wave").addEventListener("keydown", (e) => {
   if (e.key === "Home") { audio.seek(audio.loop() ? audio.loop().a : 0); e.preventDefault(); }
 });
