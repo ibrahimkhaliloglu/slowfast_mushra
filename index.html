@@ -104,6 +104,10 @@ ul.checks li::before { content: ""; position: absolute; left: 0; top: 2px; width
 ul.checks li.ok { color: var(--muted); }
 ul.checks li.ok::before { content: "✓"; border-color: var(--ok); background: var(--ok); color: var(--surface); font-size: 12px; line-height: 14px; text-align: center; font-weight: 700; }
 #hpAnswers .btn { min-width: 64px; }
+.seg { display: inline-flex; border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; width: fit-content; }
+.seg button { border: 0; background: transparent; color: var(--accent); padding: 8px 16px; font-weight: 600; }
+.seg button + button { border-left: 1px solid var(--accent); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .rtools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
 .keys { font-size: 12px; color: var(--muted); }
 kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--surface); color: var(--ink); }
@@ -188,13 +192,18 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
       </div>
     </div>
     <div class="panel" id="hp">
-      <div class="trial-head"><h2>1. Headphone check</h2><span class="pill" id="hpPill" hidden></span></div>
-      <p>Put on headphones in a quiet room. Play the sample and set a comfortable volume; keep it for the whole test.</p>
-      <div class="row-actions"><button class="btn ghost small" id="volBtn" type="button">Play a sample to set the volume</button></div>
-      <p id="hpText">Then answer 8 short questions: twice which ear you hear a tone in, and six times which of three tones is the quietest. It takes about a minute.</p>
-      <div class="row-actions" id="hpPlayRow" hidden><button class="btn small" id="hpPlay" type="button">Play</button><span class="eyebrow" id="hpCount"></span></div>
-      <div class="row-actions" id="hpAnswers"></div>
-      <div class="row-actions"><button class="btn small" id="hpStart" type="button">Start the headphone check</button></div>
+      <div class="trial-head"><h2>1. Sound check</h2><span class="pill" id="hpPill" hidden></span></div>
+      <p>Listen in a quiet room. Headphones give the most reliable results, but loudspeakers work too. What are you listening with?</p>
+      <div class="seg" id="devSeg" role="group" aria-label="Listening device">
+        <button type="button" data-dev="headphones" aria-pressed="false">Headphones</button><button type="button" data-dev="speakers" aria-pressed="false">Loudspeakers</button>
+      </div>
+      <div class="stack" id="hpBody" hidden>
+        <div class="row-actions"><button class="btn ghost small" id="volBtn" type="button">Play a sample to set the volume</button></div>
+        <p id="hpText"></p>
+        <div class="row-actions" id="hpPlayRow" hidden><button class="btn small" id="hpPlay" type="button">Play</button><span class="eyebrow" id="hpCount"></span></div>
+        <div class="row-actions" id="hpAnswers"></div>
+        <div class="row-actions"><button class="btn small" id="hpStart" type="button">Start the check</button></div>
+      </div>
     </div>
     <div class="panel">
       <h2>2. Try the example</h2>
@@ -206,15 +215,12 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
       <div class="form">
         <label class="field" for="p-name">Name or anonymous ID<input type="text" id="p-name" maxlength="60" placeholder="e.g. L07"></label>
         <label class="field" for="p-lang">Native language<input type="text" id="p-lang" maxlength="40" placeholder="e.g. Hungarian"></label>
-        <label class="field" for="p-phones">Listening with headphones?
-          <select id="p-phones"><option value="">Choose</option><option value="yes">Yes</option><option value="no">No, loudspeakers</option></select>
-        </label>
       </div>
       <div class="row-actions">
         <button class="btn" type="submit" id="start" disabled>Start the test</button>
         <button class="btn ghost" type="button" id="resume" hidden>Resume</button>
       </div>
-      <p class="status" id="saveInfo">Do the headphone check first.</p>
+      <p class="status" id="saveInfo">Do the sound check first.</p>
     </form>
   </section>
 
@@ -706,11 +712,32 @@ function copyText(el, statusEl, text) {
    Three 200 Hz tones; one is 6 dB quieter, one is phase-inverted in the right ear. Over headphones the quieter one is easy
    to pick; over loudspeakers the inverted one partly cancels in the air and sounds quietest. Pass: both sides right and
    at least 5 of the 6 tone questions (the criterion of Woods et al.). The result is saved with the listener's answers. */
-const HP = { ctx: null, src: null, plan: [], i: 0, lr: 0, ap: 0, played: false, done: false, result: null, tries: 0 };
+// Loudspeaker listeners skip the antiphase test (it is built to fail on loudspeakers); they count quiet beeps instead,
+// which shows the sound plays and is audible at their volume.
+const HP = { dev: "", ctx: null, src: null, plan: [], i: 0, lr: 0, ap: 0, cnt: 0, played: false, done: false, result: null, tries: 0 };
+const HP_INTRO = {
+  headphones: "Then answer 8 short questions: twice which ear you hear a tone in, and six times which of three tones is the quietest. It takes about a minute.",
+  speakers: "Then answer 2 short questions: how many quiet beeps you hear. Sit in front of the loudspeakers, as you will for the test.",
+};
+for (const b of $("devSeg").children) b.addEventListener("click", () => {
+  if (HP.src) { try { HP.src.stop(); } catch {} HP.src = null; }
+  HP.dev = b.dataset.dev; HP.done = false; HP.result = null; HP.tries = 0;
+  for (const x of $("devSeg").children) x.setAttribute("aria-pressed", String(x === b));
+  $("hpBody").hidden = false; $("hpPill").hidden = true; $("hpPlayRow").hidden = true; $("hpAnswers").textContent = "";
+  $("hpText").textContent = HP_INTRO[HP.dev];
+  $("hpStart").hidden = false; $("hpStart").textContent = "Start the check";
+  $("start").disabled = true; $("saveInfo").textContent = "Do the sound check first.";
+});
 function hpCtx() { if (!HP.ctx) { const AC = window.AudioContext || window.webkitAudioContext; HP.ctx = new AC(); } if (HP.ctx.state === "suspended") HP.ctx.resume(); return HP.ctx; }
 function hpBuffer(item) {
   const ctx = hpCtx(), sr = ctx.sampleRate, A = 0.1;
   const tone = (n, f) => Array.from({ length: n }, (_, k) => { const r = Math.min(1, k / (0.1 * sr), (n - k) / (0.1 * sr)); return Math.sin(2 * Math.PI * f * k / sr) * (0.5 - 0.5 * Math.cos(Math.PI * r)); });
+  if (item.kind === "count") {  // item.n beeps of 1 kHz, 12 dB below the tones, same in both channels
+    const n = Math.round(0.25 * sr), gap = Math.round(0.45 * sr), lead = Math.round(0.3 * sr);
+    const b = ctx.createBuffer(2, lead + item.n * (n + gap), sr), x = tone(n, 1000);
+    for (let c = 0; c < 2; c++) { const ch = b.getChannelData(c); for (let j = 0; j < item.n; j++) ch.set(x.map((v) => v * A / 4), lead + j * (n + gap)); }
+    return b;
+  }
   if (item.kind === "lr") {
     const n = Math.round(0.8 * sr), b = ctx.createBuffer(2, n, sr), x = tone(n, 500);
     b.getChannelData(item.side === "L" ? 0 : 1).set(x.map((v) => v * A));
@@ -727,15 +754,15 @@ function hpBuffer(item) {
 function hpRender() {
   const it = HP.plan[HP.i];
   $("hpCount").textContent = `Question ${HP.i + 1} of ${HP.plan.length}`;
-  $("hpText").textContent = it.kind === "lr" ? "Play the tone. Which ear do you hear it in?" : "Play the three tones. Which one is the quietest?";
-  const opts = it.kind === "lr" ? [["L", "Left"], ["R", "Right"]] : [[0, "1st"], [1, "2nd"], [2, "3rd"]];
+  $("hpText").textContent = { lr: "Play the tone. Which ear do you hear it in?", ap: "Play the three tones. Which one is the quietest?", count: "Play the beeps. How many do you hear?" }[it.kind];
+  const opts = { lr: [["L", "Left"], ["R", "Right"]], ap: [[0, "1st"], [1, "2nd"], [2, "3rd"]], count: [[1, "1"], [2, "2"], [3, "3"]] }[it.kind];
   $("hpAnswers").innerHTML = opts.map(([v, l]) => `<button class="btn ghost small" type="button" data-v="${v}" ${HP.played ? "" : "disabled"}>${l}</button>`).join("");
 }
 function hpBegin() {
   audio.stop(); HP.tries++;
-  const sides = shuffle(["L", "R"]);
-  HP.plan = [...sides.map((side) => ({ kind: "lr", side })), ...Array.from({ length: 6 }, () => ({ kind: "ap", order: shuffle(["quiet", "anti", "normal"]) }))];
-  HP.i = 0; HP.lr = 0; HP.ap = 0; HP.played = false;
+  HP.plan = HP.dev === "speakers" ? shuffle([1, 2, 3]).slice(0, 2).map((n) => ({ kind: "count", n }))
+    : [...shuffle(["L", "R"]).map((side) => ({ kind: "lr", side })), ...Array.from({ length: 6 }, () => ({ kind: "ap", order: shuffle(["quiet", "anti", "normal"]) }))];
+  HP.i = 0; HP.lr = 0; HP.ap = 0; HP.cnt = 0; HP.played = false;
   $("hpStart").hidden = true; $("hpPlayRow").hidden = false; $("hpPill").hidden = true;
   hpRender();
 }
@@ -753,25 +780,35 @@ $("hpAnswers").addEventListener("click", (e) => {
   const it = HP.plan[HP.i], v = b.dataset.v;
   if (it.kind === "lr" && v === it.side) HP.lr++;
   if (it.kind === "ap" && it.order[+v] === "quiet") HP.ap++;
+  if (it.kind === "count" && +v === it.n) HP.cnt++;
   if (HP.src) { try { HP.src.stop(); } catch {} HP.src = null; }
   HP.i++; HP.played = false;
   if (HP.i < HP.plan.length) return hpRender();
   hpFinish();
 });
 function hpFinish() {
-  const pass = HP.lr === 2 && HP.ap >= 5;
-  HP.done = true; HP.result = { pass, leftRight: HP.lr, antiphase: HP.ap, of: 6, tries: HP.tries };
+  const spk = HP.dev === "speakers";
+  const pass = spk ? HP.cnt === 2 : HP.lr === 2 && HP.ap >= 5;
+  HP.done = true;
+  HP.result = spk ? { device: "speakers", pass, beeps: HP.cnt, of: 2, tries: HP.tries }
+    : { device: "headphones", pass, leftRight: HP.lr, antiphase: HP.ap, of: 6, tries: HP.tries };
   $("hpPlayRow").hidden = true; $("hpAnswers").textContent = "";
   $("hpPill").hidden = false; $("hpPill").className = "pill " + (pass ? "ok" : "out"); $("hpPill").textContent = pass ? "Passed" : "Not passed";
-  $("hpText").textContent = pass ? `Passed: ${HP.ap} of 6 tones and both ears right. Keep this volume for the test.`
+  $("hpText").textContent = spk
+    ? (pass ? "Passed. Keep this volume and seating for the test." : "Some beeps were missed: turn the volume up a little or move closer to the loudspeakers, then try again.")
+    : pass ? `Passed: ${HP.ap} of 6 tones and both ears right. Keep this volume for the test.`
     : (HP.lr < 2 ? "One of the ears gave the wrong answer: check that both sides of your headphones work and are the right way round, then try again."
-      : `You picked the quietest tone ${HP.ap} of 6 times. This often means the sound comes from loudspeakers rather than headphones. Please check your headphones and try again.`);
+      : `You picked the quietest tone ${HP.ap} of 6 times. This often means the sound comes from loudspeakers rather than headphones: check your headphones and try again, or choose Loudspeakers above.`);
   $("hpStart").hidden = false; $("hpStart").textContent = "Do the check again";
   $("start").disabled = false;
   $("saveInfo").textContent = pass ? "" : "You can start anyway; the check result is saved with your answers.";
 }
-// what goes into the "headphones" column: self-report | tone score, "!" if a side was wrong (e.g. "yes|6/6")
-function hpField() { return ($("p-phones").value || "-") + (HP.result ? `|${HP.result.antiphase}/6${HP.result.leftRight === 2 ? "" : "!"}` : ""); }
+// what goes into the "headphones" column (10 characters at most): device | check score, "!" if a side was wrong,
+// e.g. "hp|6/6" (headphones, 6 of 6 antiphase tones), "spk|2/2" (loudspeakers, both beep counts right)
+function hpField() {
+  const r = HP.result; if (!r) return "-";
+  return r.device === "speakers" ? `spk|${r.beeps}/2` : `hp|${r.antiphase}/6${r.leftRight === 2 ? "" : "!"}`;
+}
 $("volBtn").addEventListener("click", () => { audio.unlock(); audio.play(EXAMPLE.ref).catch(() => {}); });
 
 /* ---------- results view for the research team: <page>#results, data from the script once the access key matches ---------- */
