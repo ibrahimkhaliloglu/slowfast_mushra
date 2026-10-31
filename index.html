@@ -97,6 +97,13 @@ button { font: inherit; cursor: pointer; }
 .tline { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-size: 13px; color: var(--muted); }
 .tline .time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
 .linkbtn { border: 0; background: none; color: var(--accent); padding: 0; font-weight: 600; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
+.coach { border-color: var(--accent); }
+ul.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+ul.checks li { position: relative; padding-left: 28px; }
+ul.checks li::before { content: ""; position: absolute; left: 0; top: 2px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); box-sizing: border-box; }
+ul.checks li.ok { color: var(--muted); }
+ul.checks li.ok::before { content: "✓"; border-color: var(--ok); background: var(--ok); color: var(--surface); font-size: 12px; line-height: 14px; text-align: center; font-weight: 700; }
+#hpAnswers .btn { min-width: 64px; }
 .rtools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
 .keys { font-size: 12px; color: var(--muted); }
 kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--surface); color: var(--ink); }
@@ -172,20 +179,30 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
     <div class="panel">
       <h2>How it works</h2>
       <ul class="steps">
-        <li>Use headphones in a quiet room. Set a comfortable volume on the first reference and keep it.</li>
         <li>There are <b>10 trials</b>, one sentence each, about 20 minutes in total.</li>
-        <li>In each trial, play the <b>Reference</b> (the original recording), then play every sample A–J. You can switch between them while they play and replay them as often as you like: the new one carries on from the same moment of the sentence.</li>
-        <li>The reference and every sample have a <b>waveform lane</b> that shows where you are in the sentence (the samples' lanes show the reference's waveform as a guide). Click a lane to play that sound from that moment, or drag across a part, one word say, to repeat just that part; the same part then repeats on every sample you switch to.</li>
-        <li>A quick way through: first find the hidden reference and the clearly worst sample, then compare the rest. <b>Sort by score</b> puts the samples in the order of your ratings, so you can compare neighbours and adjust. <b>⇄ Swap</b> (or <kbd>X</kbd>) flips between the last two sounds you played, e.g. two samples or a sample and the reference, without stopping: press it as often as you like.</li>
-        <li>Rate each sample from 0 to 100 for overall quality compared with the reference: how natural and how clear it sounds, and how close it is to the reference.</li>
-        <li>One of the samples is the reference itself, hidden. Find it and rate it <b>100</b>. Each trial needs at least one sample at 100 before you can continue.</li>
+        <li>In each trial, play the <b>Reference</b> (the original recording), then play every sample A–J and rate how close each one sounds to it, from 0 to 100: how natural and how clear it is.</li>
+        <li>One of the samples is the reference itself, hidden: find it and rate it <b>100</b>.</li>
       </ul>
       <div class="scale-key" aria-label="Rating scale">
         <span><b>Bad</b>0–20</span><span><b>Poor</b>20–40</span><span><b>Fair</b>40–60</span><span><b>Good</b>60–80</span><span><b>Excellent</b>80–100</span>
       </div>
     </div>
+    <div class="panel" id="hp">
+      <div class="trial-head"><h2>1. Headphone check</h2><span class="pill" id="hpPill" hidden></span></div>
+      <p>Put on headphones in a quiet room. Play the sample and set a comfortable volume; keep it for the whole test.</p>
+      <div class="row-actions"><button class="btn ghost small" id="volBtn" type="button">Play a sample to set the volume</button></div>
+      <p id="hpText">Then answer 8 short questions: twice which ear you hear a tone in, and six times which of three tones is the quietest. It takes about a minute.</p>
+      <div class="row-actions" id="hpPlayRow" hidden><button class="btn small" id="hpPlay" type="button">Play</button><span class="eyebrow" id="hpCount"></span></div>
+      <div class="row-actions" id="hpAnswers"></div>
+      <div class="row-actions"><button class="btn small" id="hpStart" type="button">Start the headphone check</button></div>
+    </div>
+    <div class="panel">
+      <h2>2. Try the example</h2>
+      <p>A practice trial with a different voice and 4 samples. A checklist shows each way to listen and compare as you try it. Nothing is saved.</p>
+      <div class="row-actions"><button class="btn ghost" id="exBtn" type="button">Try the example</button><span class="status" id="exDone"></span></div>
+    </div>
     <form class="panel" id="pform" autocomplete="off">
-      <h2>About you <span class="muted" style="font-weight:400;font-size:14px">(optional)</span></h2>
+      <h2>3. About you <span class="muted" style="font-weight:400;font-size:14px">(optional)</span></h2>
       <div class="form">
         <label class="field" for="p-name">Name or anonymous ID<input type="text" id="p-name" maxlength="60" placeholder="e.g. L07"></label>
         <label class="field" for="p-lang">Native language<input type="text" id="p-lang" maxlength="40" placeholder="e.g. Hungarian"></label>
@@ -194,10 +211,10 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
         </label>
       </div>
       <div class="row-actions">
-        <button class="btn" type="submit" id="start">Start the test</button>
+        <button class="btn" type="submit" id="start" disabled>Start the test</button>
         <button class="btn ghost" type="button" id="resume" hidden>Resume</button>
       </div>
-      <p class="status" id="saveInfo"></p>
+      <p class="status" id="saveInfo">Do the headphone check first.</p>
     </form>
   </section>
 
@@ -208,6 +225,19 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
         <span class="eyebrow" id="tCount"></span>
       </div>
       <div class="progress"><i id="tProg"></i></div>
+    </div>
+    <div class="panel coach" id="coach" hidden>
+      <h3>Example: try each of these</h3>
+      <ul class="checks" id="coachList">
+        <li data-k="ref">Play the <b>Reference</b>.</li>
+        <li data-k="two">Play a sample, then click another one while it plays: it carries on from the same moment.</li>
+        <li data-k="jump"><b>Click a waveform lane</b> to play that sound from that moment.</li>
+        <li data-k="loop"><b>Drag across a lane</b> over one word: that part repeats, on every sound you switch to.</li>
+        <li data-k="swap">Press <b>⇄ Swap</b> (or <kbd>X</kbd>) to flip between the last two sounds you played.</li>
+        <li data-k="rate">Rate the samples, and the one that sounds just like the reference <b>100</b>.</li>
+        <li data-k="sort">Press <b>Sort by score</b> to line the samples up by your ratings and compare neighbours.</li>
+      </ul>
+      <p class="muted">Keys: <kbd>R</kbd> reference, <kbd>A</kbd>–<kbd>D</kbd> samples, <kbd>X</kbd> swap, <kbd>Space</kbd> pause, <kbd>←</kbd><kbd>→</kbd> 1 s.</p>
     </div>
     <button class="refbtn" id="refBtn" type="button">
       <span class="icon" id="refIcon"></span>
@@ -295,6 +325,8 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
 <script>
 (() => {
 const TRIALS = [{"id":"t1","ref":"f34b5e157b","stimuli":["55e953e93b","fbc4c2d54c","6f1a033698","098f9d8f0a","fbf4761068","cfa2e74eca","e121b44269","297fe82b44","bec99ae8ec","eff303b21b"]},{"id":"t2","ref":"9a61e833b7","stimuli":["fb94134cd6","1cdc4ba4fd","a1a4a33a6c","c3f518fade","8cca51eab5","689c74d113","f76d431103","25cb32cc93","376366d793","b80f2a1303"]},{"id":"t3","ref":"01bcf69010","stimuli":["3a8d927cf4","376a935247","707e559150","514374e786","7ea1a6fa28","6f4577784e","76c61c8160","f3953ecf75","0e52d82876","2f7e82fd0f"]},{"id":"t4","ref":"c65d8e497c","stimuli":["500ea73236","4474b5a807","85183d5072","faf5eda58c","d09425d73f","53d346bed0","5a2ef0f252","97a9a80baf","f570338a67","7d772a19f6"]},{"id":"t5","ref":"895e647ea8","stimuli":["481abeb975","515c229173","4c36cdf356","761e18e034","86c18befc5","d0ee271f7f","722919414e","f71c601836","4eb3c4506e","436410e75b"]},{"id":"t6","ref":"0e87c55ce0","stimuli":["681293bf28","d1eafa62dc","7c2c5e9a73","21267efdfb","d18866ba6f","c3306b9eee","21c560a272","b62f3412a5","d2f55f4a40","1ee1e0385d"]},{"id":"t7","ref":"ba21070c16","stimuli":["6754cbcf94","cab1eec1f8","32414974bd","18a15688c8","8c2ab27cae","3651eeb392","bcb5989bdc","1b99e08b21","1409d88119","0926c232f7"]},{"id":"t8","ref":"10990c895f","stimuli":["7568f4128c","3839e4db65","b0c1cb09bd","9938ac45c8","0252fa7c04","d362a84e04","242ec4f173","579771846e","653448bd24","b3c4338a53"]},{"id":"t9","ref":"a9fd2f35a1","stimuli":["222b5a0d37","18f725c2eb","1852cc3aab","d6d37f74f8","a4445a601f","4cb4affc92","78a3c8dfc3","436111eb7f","d1a03a78ee","4f887d659b"]},{"id":"t10","ref":"0a43e3963f","stimuli":["4c00007d80","aa381f52d1","71240c0368","c3859541a3","f1ba9b1f76","6396d72d9d","a3512eec8a","cbfaf16286","3dbfed8296","3faaf68d35"]}];
+// practice trial (prepare_example.py): never rated or saved
+const EXAMPLE = {"ref":"5245b88188","stimuli":["e350f664d0","7f93cd1a4c","974d28b187","6cde63623d"]};
 const TEST = "ult2mel-01fi-v1";
 const LS_KEY = "mushra-" + TEST;
 const LETTERS = "ABCDEFGHIJKL";
@@ -326,7 +358,7 @@ $("pform").addEventListener("submit", (e) => {
   e.preventDefault();
   const order = shuffle(TRIALS.map((_, i) => i));
   const perms = {}; for (const t of TRIALS) perms[t.id] = shuffle(t.stimuli);
-  S = { sid: rid(), info: { name: $("p-name").value.trim(), nativeLanguage: $("p-lang").value.trim(), headphones: $("p-phones").value }, startedAt: new Date().toISOString(), order, perms, idx: 0, recs: {}, ua: navigator.userAgent.slice(0, 160) };
+  S = { sid: rid(), info: { name: $("p-name").value.trim(), nativeLanguage: $("p-lang").value.trim(), headphones: hpField(), hpCheck: HP.result }, startedAt: new Date().toISOString(), order, perms, idx: 0, recs: {}, ua: navigator.userAgent.slice(0, 160) };
   lsSet(S); audio.unlock(); startTrial();
 });
 $("resume").addEventListener("click", () => { S = lsGet(); if (!S) return; audio.unlock(); startTrial(); });
@@ -415,11 +447,19 @@ let T = null; // current trial view {t, stims, scores, played:Set, t0}
 function startTrial() {
   if (S.idx >= S.order.length) return finish();
   const t = TRIALS[S.order[S.idx]];
-  const stims = S.perms[t.id];
-  T = { t, stims, scores: Object.fromEntries(stims.map((s) => [s, 0])), played: new Set(), refPlayed: false, t0: new Date().toISOString(), loadErr: false, sorts: 0, loops: 0, swaps: 0 };
-  $("tTitle").textContent = `Trial ${S.idx + 1} of ${S.order.length}`;
-  $("tProg").style.width = (S.idx / S.order.length * 100) + "%";
-  $("next").textContent = S.idx === S.order.length - 1 ? "Finish" : "Next trial";
+  openTrial(t, S.perms[t.id], `Trial ${S.idx + 1} of ${S.order.length}`, S.idx / S.order.length, S.idx === S.order.length - 1 ? "Finish" : "Next trial", false);
+}
+function startExample() {
+  audio.unlock();
+  openTrial({ id: "example", ref: EXAMPLE.ref, stimuli: EXAMPLE.stimuli }, shuffle(EXAMPLE.stimuli), "Example (practice, not saved)", 0, "Finish the example", true);
+}
+$("exBtn").addEventListener("click", startExample);
+function openTrial(t, stims, title, progress, nextLabel, practice) {
+  T = { t, stims, practice, scores: Object.fromEntries(stims.map((s) => [s, 0])), played: new Set(), refPlayed: false, t0: new Date().toISOString(), loadErr: false, sorts: 0, loops: 0, swaps: 0, jumps: 0 };
+  $("tTitle").textContent = title;
+  $("tProg").style.width = (progress * 100) + "%";
+  $("next").textContent = nextLabel;
+  $("coach").hidden = !practice;
   $("lastKey").textContent = LETTERS[stims.length - 1];
   const rows = $("rows"); rows.textContent = "";
   stims.forEach((s, i) => {
@@ -440,6 +480,13 @@ function startTrial() {
   stims.forEach((id) => audio.load(id).catch(loadFail));
   check();
   show("trial");
+}
+// the practice checklist ticks off what the listener has tried
+function coach() {
+  if (!T || !T.practice) return;
+  const done = { ref: T.refPlayed, two: T.played.size >= 2, jump: T.jumps > 0, loop: T.loops > 0, swap: T.swaps > 0,
+    rate: Object.values(T.scores).some((v) => v === 100), sort: T.sorts > 0 };
+  for (const li of $("coachList").children) li.classList.toggle("ok", !!done[li.dataset.k]);
 }
 // playStim(i): play/pause sample i; playStim(i, t): play it from t; playStim(i, a, b): repeat a..b on it
 function playStim(i, t, b) {
@@ -485,6 +532,7 @@ audio.on((id, p, d, lp) => {
   $("head").style.left = (d ? p / d * 100 : 0) + "%";
   $("wave").setAttribute("aria-valuemax", d.toFixed(1)); $("wave").setAttribute("aria-valuenow", p.toFixed(1));
   if (!wave.drag) showSel(lp, d);
+  coach();
 });
 
 /* ---------- time bar: click to jump, drag to repeat a part ---------- */
@@ -538,7 +586,7 @@ function attachLane(el, onClick, onDrag) {
     wave.drag = null;
     const t = timeAt(e);
     if (g.moved && Math.abs(t - g.t0) >= 0.15) { T.loops++; onDrag(Math.min(t, g.t0), Math.max(t, g.t0)); }
-    else onClick(t);
+    else { T.jumps++; onClick(t); }
     showSel(audio.loop(), wave.buf.duration);
   });
   el.addEventListener("pointercancel", () => { wave.drag = null; showSel(audio.loop(), wave.buf ? wave.buf.duration : 0); });
@@ -557,7 +605,7 @@ function order(by) {
   rows.sort(by === "score" ? (a, b) => T.scores[b.dataset.stim] - T.scores[a.dataset.stim] || a.dataset.i - b.dataset.i : (a, b) => a.dataset.i - b.dataset.i);
   for (const r of rows) $("rows").appendChild(r);
 }
-$("sortBtn").addEventListener("click", () => { T.sorts++; order("score"); $("origBtn").hidden = false; });
+$("sortBtn").addEventListener("click", () => { T.sorts++; order("score"); $("origBtn").hidden = false; coach(); });
 $("origBtn").addEventListener("click", () => { order("orig"); $("origBtn").hidden = true; });
 document.addEventListener("keydown", (e) => {
   if ($("trial").hidden || !T || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -584,9 +632,11 @@ function check() {
   $("tStatus").textContent = msg || (sendFailed ? "Ready. Your answers are not reaching the server right now; they are kept and sent again, or you can copy them at the end." : "Ready.");
   $("tStatus").className = "status" + (msg ? " bad" : "");
   $("next").disabled = !!msg;
+  coach();
 }
 $("next").addEventListener("click", () => {
   audio.stop();
+  if (T.practice) { T = null; $("exDone").textContent = "Example done. You can try it again or start the test."; show("intro"); return; }
   const rec = { trial: T.t.id, position: S.idx + 1, startedAt: T.t0, finishedAt: new Date().toISOString(),
     ratings: T.stims.map((s, i) => ({ stim: s, label: LETTERS[i], score: T.scores[s], played: T.played.has(s) })),
     sorts: T.sorts, loops: T.loops, swaps: T.swaps };
@@ -651,6 +701,78 @@ function copyText(el, statusEl, text) {
   try { navigator.clipboard.writeText(t).then(() => { statusEl.textContent = "Copied."; }, fallback); } catch { fallback(); }
 }
 
+
+/* ---------- headphone check: left/right, then the antiphase test of Woods et al. (2017, Atten. Percept. Psychophys.) ----------
+   Three 200 Hz tones; one is 6 dB quieter, one is phase-inverted in the right ear. Over headphones the quieter one is easy
+   to pick; over loudspeakers the inverted one partly cancels in the air and sounds quietest. Pass: both sides right and
+   at least 5 of the 6 tone questions (the criterion of Woods et al.). The result is saved with the listener's answers. */
+const HP = { ctx: null, src: null, plan: [], i: 0, lr: 0, ap: 0, played: false, done: false, result: null, tries: 0 };
+function hpCtx() { if (!HP.ctx) { const AC = window.AudioContext || window.webkitAudioContext; HP.ctx = new AC(); } if (HP.ctx.state === "suspended") HP.ctx.resume(); return HP.ctx; }
+function hpBuffer(item) {
+  const ctx = hpCtx(), sr = ctx.sampleRate, A = 0.1;
+  const tone = (n, f) => Array.from({ length: n }, (_, k) => { const r = Math.min(1, k / (0.1 * sr), (n - k) / (0.1 * sr)); return Math.sin(2 * Math.PI * f * k / sr) * (0.5 - 0.5 * Math.cos(Math.PI * r)); });
+  if (item.kind === "lr") {
+    const n = Math.round(0.8 * sr), b = ctx.createBuffer(2, n, sr), x = tone(n, 500);
+    b.getChannelData(item.side === "L" ? 0 : 1).set(x.map((v) => v * A));
+    return b;
+  }
+  const n = Math.round(1.0 * sr), gap = Math.round(0.5 * sr), b = ctx.createBuffer(2, 3 * n + 2 * gap, sr), x = tone(n, 200);
+  const L = b.getChannelData(0), R = b.getChannelData(1);
+  item.order.forEach((kind, j) => {
+    const g = kind === "quiet" ? A / 2 : A, sign = kind === "anti" ? -1 : 1, o = j * (n + gap);
+    for (let k = 0; k < n; k++) { L[o + k] = x[k] * g; R[o + k] = sign * x[k] * g; }
+  });
+  return b;
+}
+function hpRender() {
+  const it = HP.plan[HP.i];
+  $("hpCount").textContent = `Question ${HP.i + 1} of ${HP.plan.length}`;
+  $("hpText").textContent = it.kind === "lr" ? "Play the tone. Which ear do you hear it in?" : "Play the three tones. Which one is the quietest?";
+  const opts = it.kind === "lr" ? [["L", "Left"], ["R", "Right"]] : [[0, "1st"], [1, "2nd"], [2, "3rd"]];
+  $("hpAnswers").innerHTML = opts.map(([v, l]) => `<button class="btn ghost small" type="button" data-v="${v}" ${HP.played ? "" : "disabled"}>${l}</button>`).join("");
+}
+function hpBegin() {
+  audio.stop(); HP.tries++;
+  const sides = shuffle(["L", "R"]);
+  HP.plan = [...sides.map((side) => ({ kind: "lr", side })), ...Array.from({ length: 6 }, () => ({ kind: "ap", order: shuffle(["quiet", "anti", "normal"]) }))];
+  HP.i = 0; HP.lr = 0; HP.ap = 0; HP.played = false;
+  $("hpStart").hidden = true; $("hpPlayRow").hidden = false; $("hpPill").hidden = true;
+  hpRender();
+}
+$("hpStart").addEventListener("click", hpBegin);
+$("hpPlay").addEventListener("click", () => {
+  audio.stop();
+  const ctx = hpCtx();
+  if (HP.src) { try { HP.src.stop(); } catch {} }
+  const src = ctx.createBufferSource(); src.buffer = hpBuffer(HP.plan[HP.i]); src.connect(ctx.destination); src.start();
+  HP.src = src; HP.played = true;
+  for (const b of $("hpAnswers").children) b.disabled = false;
+});
+$("hpAnswers").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b || b.disabled) return;
+  const it = HP.plan[HP.i], v = b.dataset.v;
+  if (it.kind === "lr" && v === it.side) HP.lr++;
+  if (it.kind === "ap" && it.order[+v] === "quiet") HP.ap++;
+  if (HP.src) { try { HP.src.stop(); } catch {} HP.src = null; }
+  HP.i++; HP.played = false;
+  if (HP.i < HP.plan.length) return hpRender();
+  hpFinish();
+});
+function hpFinish() {
+  const pass = HP.lr === 2 && HP.ap >= 5;
+  HP.done = true; HP.result = { pass, leftRight: HP.lr, antiphase: HP.ap, of: 6, tries: HP.tries };
+  $("hpPlayRow").hidden = true; $("hpAnswers").textContent = "";
+  $("hpPill").hidden = false; $("hpPill").className = "pill " + (pass ? "ok" : "out"); $("hpPill").textContent = pass ? "Passed" : "Not passed";
+  $("hpText").textContent = pass ? `Passed: ${HP.ap} of 6 tones and both ears right. Keep this volume for the test.`
+    : (HP.lr < 2 ? "One of the ears gave the wrong answer: check that both sides of your headphones work and are the right way round, then try again."
+      : `You picked the quietest tone ${HP.ap} of 6 times. This often means the sound comes from loudspeakers rather than headphones. Please check your headphones and try again.`);
+  $("hpStart").hidden = false; $("hpStart").textContent = "Do the check again";
+  $("start").disabled = false;
+  $("saveInfo").textContent = pass ? "" : "You can start anyway; the check result is saved with your answers.";
+}
+// what goes into the "headphones" column: self-report | tone score, "!" if a side was wrong (e.g. "yes|6/6")
+function hpField() { return ($("p-phones").value || "-") + (HP.result ? `|${HP.result.antiphase}/6${HP.result.leftRight === 2 ? "" : "!"}` : ""); }
+$("volBtn").addEventListener("click", () => { audio.unlock(); audio.play(EXAMPLE.ref).catch(() => {}); });
 
 /* ---------- results view for the research team: <page>#results, data from the script once the access key matches ---------- */
 const KEY_LS = LS_KEY + "-resultskey";
