@@ -175,7 +175,7 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
         <li>Use headphones in a quiet room. Set a comfortable volume on the first reference and keep it.</li>
         <li>There are <b>10 trials</b>, one sentence each, about 20 minutes in total.</li>
         <li>In each trial, play the <b>Reference</b> (the original recording), then play every sample A–J. You can switch between them while they play and replay them as often as you like: the new one carries on from the same moment of the sentence.</li>
-        <li>The <b>time bar</b> under the reference, and the lane under each sample, show where you are in the sentence (they all show the reference's waveform as a guide). Click a sample's lane to play it from that moment, or drag across a part, one word say, to repeat just that part; the same part then repeats on every sample you switch to.</li>
+        <li>The reference and every sample have a <b>waveform lane</b> that shows where you are in the sentence (the samples' lanes show the reference's waveform as a guide). Click a lane to play that sound from that moment, or drag across a part, one word say, to repeat just that part; the same part then repeats on every sample you switch to.</li>
         <li>A quick way through: first find the hidden reference and the clearly worst sample, then compare the rest. <b>Sort by score</b> puts the samples in the order of your ratings, so you can compare neighbours and adjust. <b>⇄ Swap</b> (or <kbd>X</kbd>) flips between the last two sounds you played, e.g. two samples or a sample and the reference, without stopping: press it as often as you like.</li>
         <li>Rate each sample from 0 to 100 for overall quality compared with the reference: how natural and how clear it sounds, and how close it is to the reference.</li>
         <li>One of the samples is the reference itself, hidden. Find it and rate it <b>100</b>. Each trial needs at least one sample at 100 before you can continue.</li>
@@ -219,7 +219,7 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
       </div>
       <div class="tline">
         <span class="time" id="tTime">0:00.0 / 0:00.0</span>
-        <span id="selInfo">Click to jump, drag to repeat a part.</span>
+        <span id="selInfo">Reference: click to play from there, drag to repeat a part.</span>
         <button class="linkbtn" id="selClear" type="button" hidden>Play the whole sentence</button>
       </div>
     </div>
@@ -445,16 +445,18 @@ function startTrial() {
 function playStim(i, t, b) {
   const s = T.stims[i], btn = $("rows").querySelector(`[data-i="${i}"] .pbtn`);
   T.played.add(s); btn.classList.add("played");
-  if (t == null) audio.play(s).catch(loadFail);
-  else {
-    const lp = audio.loop();
-    if (b != null) audio.setLoop(t, b, true);
-    else if (lp && (t < lp.a || t > lp.b)) audio.setLoop(null, null, true);  // a click outside the repeating part ends it
-    audio.playFrom(s, t).catch(loadFail);
-  }
+  playAt(s, t, b);
   check();
 }
-function playRef() { T.refPlayed = true; audio.play(T.t.ref).catch(loadFail); }
+// playRef() / playRef(t) / playRef(a, b): the same for the reference
+function playRef(t, b) { T.refPlayed = true; playAt(T.t.ref, t, b); }
+function playAt(id, t, b) {
+  if (t == null) { audio.play(id).catch(loadFail); return; }
+  const lp = audio.loop();
+  if (b != null) audio.setLoop(t, b, true);
+  else if (lp && (t < lp.a || t > lp.b)) audio.setLoop(null, null, true);  // a click outside the repeating part ends it
+  audio.playFrom(id, t).catch(loadFail);
+}
 // A/B: switch to the other of the last two sounds played, from the same moment (keeps playing, or stays paused there)
 function swap() {
   const other = audio.pair()[1]; if (!other) return;
@@ -464,7 +466,7 @@ function swap() {
 const soundName = (id) => (id === T.t.ref ? "Reference" : LETTERS[T.stims.indexOf(id)]);
 $("swapBtn").addEventListener("click", swap);
 function loadFail() { T.loadErr = true; $("tStatus").textContent = "A sound file did not load. Check your connection and reload the page; your progress is kept."; $("tStatus").className = "status bad"; }
-$("refBtn").addEventListener("click", playRef);
+$("refBtn").addEventListener("click", () => playRef());
 const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
 audio.on((id, p, d, lp) => {
   if (!T) return;
@@ -479,6 +481,7 @@ audio.on((id, p, d, lp) => {
   const [a, b] = audio.pair();
   $("swapBtn").disabled = !b;
   $("swapBtn").textContent = b ? `⇄ Swap ${soundName(a)} ↔ ${soundName(b)}` : "⇄ Swap";
+  $("head").hidden = !on;
   $("head").style.left = (d ? p / d * 100 : 0) + "%";
   $("wave").setAttribute("aria-valuemax", d.toFixed(1)); $("wave").setAttribute("aria-valuenow", p.toFixed(1));
   if (!wave.drag) showSel(lp, d);
@@ -515,7 +518,7 @@ function showSel(lp, d) {
     if (lp && d) { sel.style.left = (lp.a / d * 100) + "%"; sel.style.width = ((lp.b - lp.a) / d * 100) + "%"; }
   }
   $("selClear").hidden = !lp;
-  $("selInfo").textContent = lp ? `Repeating ${fmt(lp.a)}–${fmt(lp.b)} on every sample.` : "Click to jump, drag to repeat a part.";
+  $("selInfo").textContent = lp ? `Repeating ${fmt(lp.a)}–${fmt(lp.b)} on every sample.` : "Reference: click to play from there, drag to repeat a part.";
 }
 // click on a lane -> onClick(t); drag across it -> onDrag(a, b), shown on every lane while dragging
 function attachLane(el, onClick, onDrag) {
@@ -540,12 +543,8 @@ function attachLane(el, onClick, onDrag) {
   });
   el.addEventListener("pointercancel", () => { wave.drag = null; showSel(audio.loop(), wave.buf ? wave.buf.duration : 0); });
 }
-// the top bar acts on whatever is playing (or paused)
-attachLane($("wave"), (t) => {
-  const lp = audio.loop();
-  if (lp && (t < lp.a || t > lp.b)) audio.setLoop(null);  // a click outside the repeating part ends it
-  audio.seek(t);
-}, (a, b) => audio.setLoop(a, b));
+// the top bar is the reference's own lane: its real waveform, and clicks or drags play the reference
+attachLane($("wave"), (t) => playRef(t), (a, b) => playRef(a, b));
 $("wave").addEventListener("keydown", (e) => {
   if (e.key === "Home") { audio.seek(audio.loop() ? audio.loop().a : 0); e.preventDefault(); }
 });
