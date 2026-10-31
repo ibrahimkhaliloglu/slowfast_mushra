@@ -619,14 +619,22 @@ document.addEventListener("keydown", (e) => {
   if (tag === "TEXTAREA" || (tag === "INPUT" && el.type !== "range")) return;
   const k = e.key.length === 1 ? e.key.toUpperCase() : e.key;
   const i = LETTERS.indexOf(k);
+  if (e.repeat && k !== "ArrowLeft" && k !== "ArrowRight") { if (k === " ") e.preventDefault(); return; }  // a held key acts once
   if (k === "R") playRef();
   else if (k === "X") swap();
   else if (i >= 0 && i < T.stims.length) playStim(i);
-  else if (k === " " && tag !== "BUTTON") audio.toggle();
+  else if (k === " ") audio.toggle();  // always pause/resume, also when a button has focus (see keyup below)
   else if (k === "Escape") audio.stop();
   else if ((k === "ArrowLeft" || k === "ArrowRight") && tag !== "INPUT") audio.seek(audio.pos() + (k === "ArrowLeft" ? -1 : 1));
   else return;
   e.preventDefault();
+});
+// Space on a focused button would also "click" it on keyup (after Swap: swap again instead of pausing); keydown already
+// paused or resumed, so cancel that click
+document.addEventListener("keyup", (e) => {
+  if ($("trial").hidden || !T || e.key !== " ") return;
+  const el = document.activeElement;
+  if (el && el.tagName === "BUTTON") e.preventDefault();
 });
 function check() {
   if (T.loadErr) return;
