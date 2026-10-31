@@ -531,9 +531,11 @@ audio.on((id, p, d, lp) => {
     if (on) h.style.left = (d ? p / d * 100 : 0) + "%";
   }
   $("tTime").textContent = `${fmt(p)} / ${fmt(d)}`;
-  const [a, b] = audio.pair();
-  $("swapBtn").disabled = !b;
-  $("swapBtn").textContent = b ? `⇄ Swap ${soundName(a)} ↔ ${soundName(b)}` : "⇄ Swap";
+  // touch the Swap button only when its pair changes: this runs every frame while sound plays, and rewriting the button
+  // under the pointer between press and release makes some browsers (e.g. Safari) drop the click
+  const [a, b] = audio.pair(), label = b ? `⇄ Swap ${soundName(a)} ↔ ${soundName(b)}` : "⇄ Swap", sb = $("swapBtn");
+  if (sb.disabled !== !b) sb.disabled = !b;
+  if (sb.textContent !== label) sb.textContent = label;
   $("head").hidden = !on;
   $("head").style.left = (d ? p / d * 100 : 0) + "%";
   $("wave").setAttribute("aria-valuemax", d.toFixed(1)); $("wave").setAttribute("aria-valuenow", p.toFixed(1));
