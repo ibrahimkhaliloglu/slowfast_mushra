@@ -176,15 +176,15 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
 <main id="app">
   <section id="intro" class="stack">
     <div class="stack">
-      <span class="eyebrow">Listening test · ultrasound-to-speech · speaker 01fi</span>
+      <span class="eyebrow">Listening test · ultrasound-to-speech · four speakers</span>
       <h1>How natural does this synthesised speech sound?</h1>
       <p>These sentences were generated from ultrasound videos of the tongue, without any recorded audio. You will compare several versions of each sentence with the original recording and rate how close each one sounds to it. This is a MUSHRA test (MUltiple Stimuli with Hidden Reference and Anchor, ITU-R BS.1534).</p>
     </div>
     <div class="panel">
       <h2>How it works</h2>
       <ul class="steps">
-        <li>There are <b>10 trials</b>, one sentence each, about 20 minutes in total.</li>
-        <li>In each trial, play the <b>Reference</b> (the original recording), then play every sample A–J and rate how close each one sounds to it, from 0 to 100: how natural and how clear it is.</li>
+        <li>There are <b>12 trials</b>, one sentence each, about 18 minutes in total.</li>
+        <li>In each trial, play the <b>Reference</b> (the original recording), then play every sample A–E and rate how close each one sounds to it, from 0 to 100: how natural and how clear it is.</li>
         <li>One of the samples is the reference itself, hidden: find it and rate it <b>100</b>.</li>
       </ul>
       <div class="scale-key" aria-label="Rating scale">
@@ -207,7 +207,7 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
     </div>
     <div class="panel">
       <h2>2. Try the example</h2>
-      <p>A practice trial with a different voice and 4 samples. A checklist shows each way to listen and compare as you try it. Nothing is saved.</p>
+      <p>A practice trial with a sentence that is not in the test and 4 samples. A checklist shows each way to listen and compare as you try it. Nothing is saved.</p>
       <div class="row-actions"><button class="btn ghost" id="exBtn" type="button">Try the example</button><span class="status" id="exDone"></span></div>
     </div>
     <form class="panel" id="pform" autocomplete="off">
@@ -227,7 +227,7 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
   <section id="trial" class="stack" hidden>
     <div class="stack" style="gap:8px">
       <div class="trial-head">
-        <h2 id="tTitle">Trial 1 of 10</h2>
+        <h2 id="tTitle">Trial 1 of 12</h2>
         <span class="eyebrow" id="tCount"></span>
       </div>
       <div class="progress"><i id="tProg"></i></div>
@@ -330,10 +330,10 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
 
 <script>
 (() => {
-const TRIALS = [{"id":"t1","ref":"f34b5e157b","stimuli":["55e953e93b","fbc4c2d54c","6f1a033698","098f9d8f0a","fbf4761068","cfa2e74eca","e121b44269","297fe82b44","bec99ae8ec","eff303b21b"]},{"id":"t2","ref":"9a61e833b7","stimuli":["fb94134cd6","1cdc4ba4fd","a1a4a33a6c","c3f518fade","8cca51eab5","689c74d113","f76d431103","25cb32cc93","376366d793","b80f2a1303"]},{"id":"t3","ref":"01bcf69010","stimuli":["3a8d927cf4","376a935247","707e559150","514374e786","7ea1a6fa28","6f4577784e","76c61c8160","f3953ecf75","0e52d82876","2f7e82fd0f"]},{"id":"t4","ref":"c65d8e497c","stimuli":["500ea73236","4474b5a807","85183d5072","faf5eda58c","d09425d73f","53d346bed0","5a2ef0f252","97a9a80baf","f570338a67","7d772a19f6"]},{"id":"t5","ref":"895e647ea8","stimuli":["481abeb975","515c229173","4c36cdf356","761e18e034","86c18befc5","d0ee271f7f","722919414e","f71c601836","4eb3c4506e","436410e75b"]},{"id":"t6","ref":"0e87c55ce0","stimuli":["681293bf28","d1eafa62dc","7c2c5e9a73","21267efdfb","d18866ba6f","c3306b9eee","21c560a272","b62f3412a5","d2f55f4a40","1ee1e0385d"]},{"id":"t7","ref":"ba21070c16","stimuli":["6754cbcf94","cab1eec1f8","32414974bd","18a15688c8","8c2ab27cae","3651eeb392","bcb5989bdc","1b99e08b21","1409d88119","0926c232f7"]},{"id":"t8","ref":"10990c895f","stimuli":["7568f4128c","3839e4db65","b0c1cb09bd","9938ac45c8","0252fa7c04","d362a84e04","242ec4f173","579771846e","653448bd24","b3c4338a53"]},{"id":"t9","ref":"a9fd2f35a1","stimuli":["222b5a0d37","18f725c2eb","1852cc3aab","d6d37f74f8","a4445a601f","4cb4affc92","78a3c8dfc3","436111eb7f","d1a03a78ee","4f887d659b"]},{"id":"t10","ref":"0a43e3963f","stimuli":["4c00007d80","aa381f52d1","71240c0368","c3859541a3","f1ba9b1f76","6396d72d9d","a3512eec8a","cbfaf16286","3dbfed8296","3faaf68d35"]}];
+const TRIALS = [{"id":"v2t1","ref":"de5d7a642d","stimuli":["34c8c529e2","a847ee0225","fcc893b858","1568530ea8","309f940dbe"]},{"id":"v2t2","ref":"fda014d16c","stimuli":["d84254df0f","4d7ea43cf4","0d71a78e1a","e03cbb3ecc","6556373549"]},{"id":"v2t3","ref":"f23e6e20ba","stimuli":["0021876cf0","18810dc12c","921017c6f8","a65cfa57f0","bace2ec94c"]},{"id":"v2t4","ref":"d699ae44b1","stimuli":["3d55e711db","13a42032d6","b24cce5992","18ab32e7b0","88f5e3aa70"]},{"id":"v2t5","ref":"5a8226d7c0","stimuli":["d2d6c4954d","352019f94b","79237e7e73","d263539814","8ed42bca55"]},{"id":"v2t6","ref":"bb1293acd7","stimuli":["d8a6adbe21","49fbdf5e55","ff751208c1","898a8bd2a2","a34c0e9225"]},{"id":"v2t7","ref":"d25ea7099b","stimuli":["9ec20292bf","211c04141a","511dd89c91","601baf45cb","1eface22cf"]},{"id":"v2t8","ref":"81cba328f1","stimuli":["94df807b82","b7ecbd5c88","4b56489341","6229b49f02","df22afe5bd"]},{"id":"v2t9","ref":"157fec4cce","stimuli":["2488a0d58b","269d4fff6d","1bc88b46a9","0f6a64fb20","ef1ae4c675"]},{"id":"v2t10","ref":"1f67c73690","stimuli":["4a3d98d009","1baa2a31cf","cb56607fdc","9be69c97f6","29b9a0261a"]},{"id":"v2t11","ref":"9be2807960","stimuli":["b22cdc4f00","69ac097411","00fe629334","4d8825dc99","bb8f046585"]},{"id":"v2t12","ref":"926d6bb88f","stimuli":["58a1a6c1b6","cbaa440821","4c703fa8aa","85448c64c5","892e6054ca"]}];
 // practice trial (prepare_example.py): never rated or saved
-const EXAMPLE = {"ref":"5245b88188","stimuli":["e350f664d0","7f93cd1a4c","974d28b187","6cde63623d"]};
-const TEST = "ult2mel-01fi-v1";
+const EXAMPLE = {"ref":"271f39e933","stimuli":["8aea2a44af","0a33c9b628","aa68cf344d","353ebc1c59"]};
+const TEST = "ult2mel-v2";
 const LS_KEY = "mushra-" + TEST;
 const LETTERS = "ABCDEFGHIJKL";
 const ICON_PLAY = '<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9.5-5.5z"/></svg>';
@@ -380,7 +380,7 @@ const audio = (() => {
   function load(id) {
     if (!bufs.has(id)) {
       unlock();
-      const p = fetch("audio/" + id + ".mp3").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
+      const p = fetch("audio/" + id + ".wav").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
         .then((ab) => new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej)));
       p.catch(() => bufs.delete(id));
       bufs.set(id, p);
