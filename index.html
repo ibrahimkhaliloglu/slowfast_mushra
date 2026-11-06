@@ -297,7 +297,7 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
     </div>
     <div class="stack" id="doneEnd" hidden>
       <span class="eyebrow" id="doneTag">Finished</span>
-      <h1 id="doneTitle">Thank you for listening.</h1>
+      <h1 id="doneTitle">Thank you for participating in this listening test!</h1>
       <p class="lead" id="doneMsg"></p>
     </div>
     <div class="panel" id="fallback" hidden>
@@ -314,7 +314,7 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
         <div id="ovBands"></div>
       </div>
       <p id="ovTools"></p>
-      <p class="muted">Which sample was which stays hidden, so that others can take the test without being influenced. Your reference code is <span class="code" id="ovCode"></span>; quote it if you contact the person who shared this test with you.</p>
+      <p class="muted">Your reference code is <span class="code" id="ovCode"></span>; quote it if you contact me for the results. Thanks!</p>
     </div>
   </section>
 
@@ -755,7 +755,7 @@ async function finish() {
   flush();
   $("doneWait").hidden = true; $("doneEnd").hidden = false;
   $("doneTag").textContent = failed ? "Not uploaded yet" : "Finished";
-  $("doneTitle").textContent = failed ? "Your answers could not be uploaded." : "Thank you for listening.";
+  $("doneTitle").textContent = failed ? "Your answers could not be uploaded." : "Thank you for participating in this listening test!";
   $("doneMsg").textContent = failed ? "They are kept in this browser and sent again the next time you open this page, but to be safe, please also copy them below."
     : "All your answers are uploaded. You can close this page now.";
   $("fbText").value = JSON.stringify({ test: TEST, sid: S.sid, session: { ...sessionMeta(), finishedAt, trials: S.recs } });
