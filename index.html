@@ -97,6 +97,16 @@ button { font: inherit; cursor: pointer; }
 .tline { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-size: 13px; color: var(--muted); }
 .tline .time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
 .linkbtn { border: 0; background: none; color: var(--accent); padding: 0; font-weight: 600; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
+.lead { font-size: 18px; line-height: 1.45; }
+.wait { justify-items: center; text-align: center; padding-block: 36px; }
+.wait .progress { width: min(320px, 100%); }
+.spinner { width: 40px; height: 40px; border-radius: 50%; border: 4px solid var(--line); border-top-color: var(--accent); animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.code { font-family: var(--font-mono); color: var(--ink); }
+.bandrow { display: grid; grid-template-columns: 76px minmax(0, 1fr) 34px; gap: 10px; align-items: center; font-size: 13px; padding-block: 3px; }
+.bandrow .track { height: 12px; }
+.bandrow .track i { display: block; height: 100%; min-width: 2px; background: var(--accent); border-radius: 0 4px 4px 0; }
+.bandrow .n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
 .coach { border-color: var(--accent); }
 ul.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 ul.checks li { position: relative; padding-left: 28px; }
@@ -168,7 +178,7 @@ svg.chart .whisk { stroke: var(--accent); stroke-width: 2; stroke-linecap: round
 svg.chart .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
 svg.chart .hit { fill: transparent; }
 svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
-@media (prefers-reduced-motion: reduce) { .progress i { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .progress i { transition: none; } .spinner { animation-duration: 4s; } }
 </style>
 </head>
 <body>
@@ -220,6 +230,7 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
         <button class="btn" type="submit" id="start" disabled>Start the test</button>
         <button class="btn ghost" type="button" id="resume" hidden>Resume</button>
       </div>
+      <p class="muted">Your answers are uploaded after every trial, so nothing is lost if you stop early. You can come back and resume in the same browser.</p>
       <p class="status" id="saveInfo">Do the sound check first.</p>
     </form>
   </section>
@@ -277,14 +288,33 @@ svg.chart .hit:hover { fill: var(--accent-soft); opacity: .6; }
   </section>
 
   <section id="done" class="stack" hidden>
-    <span class="eyebrow">Finished</span>
-    <h1>Thank you for listening.</h1>
-    <p id="doneMsg"></p>
+    <div class="panel wait" id="doneWait" role="status" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span>
+      <h1>Please wait</h1>
+      <p class="lead">Your answers are being uploaded. <b>Do not close this page yet.</b></p>
+      <div class="progress"><i id="doneProg"></i></div>
+      <p class="muted" id="doneCount"></p>
+    </div>
+    <div class="stack" id="doneEnd" hidden>
+      <span class="eyebrow" id="doneTag">Finished</span>
+      <h1 id="doneTitle">Thank you for listening.</h1>
+      <p class="lead" id="doneMsg"></p>
+    </div>
     <div class="panel" id="fallback" hidden>
       <h3>Send your answers by hand</h3>
       <p class="muted">Your answers could not be sent automatically. Copy this text and send it to the person who shared this test with you: it contains your ratings and the details you entered.</p>
       <textarea id="fbText" readonly></textarea>
       <div class="row-actions"><button class="btn small" id="fbCopy" type="button">Copy answers</button><span class="status" id="fbStatus"></span></div>
+    </div>
+    <div class="panel" id="overview" hidden>
+      <h2>Your test at a glance</h2>
+      <div class="chips" id="ovChips"></div>
+      <div class="stack" style="gap:6px">
+        <h3>How you used the scale</h3>
+        <div id="ovBands"></div>
+      </div>
+      <p id="ovTools"></p>
+      <p class="muted">Which sample was which stays hidden, so that others can take the test without being influenced. Your reference code is <span class="code" id="ovCode"></span>; quote it if you contact the person who shared this test with you.</p>
     </div>
   </section>
 
@@ -454,9 +484,11 @@ function startTrial() {
   if (S.idx >= S.order.length) return finish();
   const t = TRIALS[S.order[S.idx]];
   openTrial(t, S.perms[t.id], `Trial ${S.idx + 1} of ${S.order.length}`, S.idx / S.order.length, S.idx === S.order.length - 1 ? "Finish" : "Next trial", false);
+  savedInfo();
 }
 function startExample() {
   audio.unlock();
+  $("tCount").textContent = "";
   openTrial({ id: "example", ref: EXAMPLE.ref, stimuli: EXAMPLE.stimuli }, shuffle(EXAMPLE.stimuli), "Example (practice, not saved)", 0, "Finish the example", true);
 }
 $("exBtn").addEventListener("click", startExample);
@@ -674,15 +706,24 @@ let chain = Promise.resolve();
 function sessionMeta() { return { info: S.info, startedAt: S.startedAt, ua: S.ua }; }
 async function send(msg) {
   // A plain-text body keeps this a "simple" request (no CORS preflight), which Apps Script web apps accept
-  const r = await fetch(ENDPOINT, { method: "POST", body: JSON.stringify(msg) });
+  // keepalive: the request completes even if the listener closes the page right after it starts
+  const r = await fetch(ENDPOINT, { method: "POST", body: JSON.stringify(msg), keepalive: true });
   const j = await r.json();
   if (!j.ok) throw new Error(j.error || "rejected");
+}
+const trialsLeft = () => outbox.filter((m) => m.kind === "trial" && S && m.sid === S.sid).length;
+function savedInfo() {  // how many finished trials the server has confirmed
+  if (!S) return;
+  const total = S.order.length, saved = Math.max(0, S.idx - trialsLeft());
+  $("tCount").textContent = `Saved: ${saved} of ${total}`;
+  $("doneProg").style.width = (saved / total * 100) + "%";
+  $("doneCount").textContent = `${saved} of ${total} trials uploaded`;
 }
 function flush() {
   chain = chain.then(async () => {
     while (outbox.length) {
       try { await send(outbox[0]); } catch { sendFailed = true; return; }
-      outbox.shift(); qSet(outbox);
+      outbox.shift(); qSet(outbox); savedInfo();
     }
     sendFailed = false;
   });
@@ -693,21 +734,52 @@ function save(rec) {
   qSet(outbox);
   return flush();
 }
+// Every trial was uploaded when it was finished, so the wait here is only for the last ones. "Finished" appears once the
+// server has confirmed all of them; the closing "finish" message then goes in the background (it updates the summary
+// sheet, which takes a while, and stays in the outbox until confirmed).
+let uploading = false;
+window.addEventListener("beforeunload", (e) => { if (uploading) { e.preventDefault(); e.returnValue = ""; } });
 async function finish() {
-  show("done");
-  $("doneMsg").textContent = "Sending your answers…";
-  outbox.push({ kind: "finish", test: TEST, sid: S.sid, ...sessionMeta(), finishedAt: new Date().toISOString(), nTrials: Object.keys(S.recs).length });
-  qSet(outbox);
-  await flush();
-  $("fbText").value = JSON.stringify({ test: TEST, sid: S.sid, session: { ...sessionMeta(), finishedAt: new Date().toISOString(), trials: S.recs } });
-  if (outbox.length) {
-    $("doneMsg").textContent = "Your answers could not be sent. They are kept in this browser and sent again the next time you open this page, but to be safe, please also copy them below.";
-    $("fallback").hidden = false;
-  } else {
-    $("doneMsg").textContent = "Your answers are saved. You can close this page.";
-    $("fallback").hidden = true;
+  $("doneWait").hidden = false; $("doneEnd").hidden = true; $("fallback").hidden = true; $("overview").hidden = true;
+  show("done"); savedInfo();
+  uploading = true;
+  for (let a = 0; a < 4; a++) {
+    await flush();
+    if (!trialsLeft()) break;
+    await new Promise((r) => setTimeout(r, 2000 * (a + 1)));
   }
+  uploading = false;
+  const failed = trialsLeft() > 0, finishedAt = new Date().toISOString();
+  outbox.push({ kind: "finish", test: TEST, sid: S.sid, ...sessionMeta(), finishedAt, nTrials: Object.keys(S.recs).length });
+  qSet(outbox);
+  flush();
+  $("doneWait").hidden = true; $("doneEnd").hidden = false;
+  $("doneTag").textContent = failed ? "Not uploaded yet" : "Finished";
+  $("doneTitle").textContent = failed ? "Your answers could not be uploaded." : "Thank you for listening.";
+  $("doneMsg").textContent = failed ? "They are kept in this browser and sent again the next time you open this page, but to be safe, please also copy them below."
+    : "All your answers are uploaded. You can close this page now.";
+  $("fbText").value = JSON.stringify({ test: TEST, sid: S.sid, session: { ...sessionMeta(), finishedAt, trials: S.recs } });
+  $("fallback").hidden = !failed;
+  overview();
   S = null; lsSet(null);
+}
+// the listener's own test, from what this page already knows: it never names a system
+function overview() {
+  const recs = Object.values(S.recs), scores = recs.flatMap((r) => r.ratings.map((x) => x.score));
+  const ms = recs.reduce((a, r) => a + Math.max(0, new Date(r.finishedAt) - new Date(r.startedAt)), 0);
+  const min = Math.round(ms / 60000), mean = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+  const hp = S.info.hpCheck;
+  const check = !hp ? "Not done" : `${hp.device === "speakers" ? "Loudspeakers" : "Headphones"}, ${hp.pass ? "passed" : "not passed"}`;
+  $("ovChips").innerHTML = [[recs.length, "trials rated"], [scores.length, "samples rated"], [min < 1 ? "<1 min" : min + " min", "listening time"], [mean.toFixed(0), "average score"]]
+    .map(([v, l]) => `<div class="chip"><b>${v}</b><span>${l}</span></div>`).join("") + `<div class="chip"><b style="font-size:14px;line-height:30px">${esc(check)}</b><span>sound check</span></div>`;
+  const names = ["Excellent", "Good", "Fair", "Poor", "Bad"], counts = [0, 0, 0, 0, 0];
+  for (const v of scores) counts[Math.min(4, Math.floor((100 - v) / 20))]++;
+  const top = Math.max(1, ...counts);
+  $("ovBands").innerHTML = names.map((n, i) => `<div class="bandrow" title="${n}: ${counts[i]} of ${scores.length} samples"><span>${n}</span><div class="track"><i style="width:${counts[i] / top * 100}%"></i></div><span class="n">${counts[i]}</span></div>`).join("");
+  const sum = (k) => recs.reduce((a, r) => a + (r[k] || 0), 0), plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  $("ovTools").textContent = `While comparing you used ${plural(sum("swaps"), "swap")}, ${plural(sum("loops"), "repeated part")} and ${plural(sum("sorts"), "sort")}.`;
+  $("ovCode").textContent = S.sid;
+  $("overview").hidden = false;
 }
 if (outbox.length) flush();   // answers left over from an earlier visit
 $("fbCopy").addEventListener("click", () => copyText($("fbText"), $("fbStatus")));
